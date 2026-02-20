@@ -1,0 +1,115 @@
+Collecting datasets
+  Downloading datasets-4.5.0-py3-none-any.whl.metadata (19 kB)
+Collecting filelock (from datasets)
+  Downloading filelock-3.24.3-py3-none-any.whl.metadata (2.0 kB)
+Requirement already satisfied: numpy>=1.17 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from datasets) (2.4.0)
+Requirement already satisfied: pyarrow>=21.0.0 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from datasets) (23.0.1)
+Collecting dill<0.4.1,>=0.3.0 (from datasets)
+  Downloading dill-0.4.0-py3-none-any.whl.metadata (10 kB)
+Requirement already satisfied: pandas in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from datasets) (2.3.3)
+Requirement already satisfied: requests>=2.32.2 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from datasets) (2.32.5)
+Collecting httpx<1.0.0 (from datasets)
+  Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+Collecting tqdm>=4.66.3 (from datasets)
+  Downloading tqdm-4.67.3-py3-none-any.whl.metadata (57 kB)
+Collecting xxhash (from datasets)
+  Downloading xxhash-3.6.0-cp311-cp311-win_amd64.whl.metadata (13 kB)
+Collecting multiprocess<0.70.19 (from datasets)
+  Downloading multiprocess-0.70.18-py311-none-any.whl.metadata (7.5 kB)
+Collecting fsspec<=2025.10.0,>=2023.1.0 (from fsspec[http]<=2025.10.0,>=2023.1.0->datasets)
+  Downloading fsspec-2025.10.0-py3-none-any.whl.metadata (10 kB)
+Collecting huggingface-hub<2.0,>=0.25.0 (from datasets)
+  Downloading huggingface_hub-1.4.1-py3-none-any.whl.metadata (13 kB)
+Requirement already satisfied: packaging in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from datasets) (25.0)
+Collecting pyyaml>=5.1 (from datasets)
+  Downloading pyyaml-6.0.3-cp311-cp311-win_amd64.whl.metadata (2.4 kB)
+Collecting aiohttp!=4.0.0a0,!=4.0.0a1 (from fsspec[http]<=2025.10.0,>=2023.1.0->datasets)
+  Downloading aiohttp-3.13.3-cp311-cp311-win_amd64.whl.metadata (8.4 kB)
+Collecting anyio (from httpx<1.0.0->datasets)
+  Downloading anyio-4.12.1-py3-none-any.whl.metadata (4.3 kB)
+Requirement already satisfied: certifi in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from httpx<1.0.0->datasets) (2026.1.4)
+Collecting httpcore==1.* (from httpx<1.0.0->datasets)
+  Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+Requirement already satisfied: idna in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from httpx<1.0.0->datasets) (3.11)
+Collecting h11>=0.16 (from httpcore==1.*->httpx<1.0.0->datasets)
+  Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Collecting hf-xet<2.0.0,>=1.2.0 (from huggingface-hub<2.0,>=0.25.0->datasets)
+  Downloading hf_xet-1.2.0-cp37-abi3-win_amd64.whl.metadata (5.0 kB)
+Collecting shellingham (from huggingface-hub<2.0,>=0.25.0->datasets)
+  Downloading shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+Collecting typer-slim (from huggingface-hub<2.0,>=0.25.0->datasets)
+  Downloading typer_slim-0.24.0-py3-none-any.whl.metadata (4.2 kB)
+Requirement already satisfied: typing-extensions>=4.1.0 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from huggingface-hub<2.0,>=0.25.0->datasets) (4.15.0)
+Collecting aiohappyeyeballs>=2.5.0 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.10.0,>=2023.1.0->datasets)
+  Downloading aiohappyeyeballs-2.6.1-py3-none-any.whl.metadata (5.9 kB)
+Collecting aiosignal>=1.4.0 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.10.0,>=2023.1.0->datasets)
+  Downloading aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+Collecting attrs>=17.3.0 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.10.0,>=2023.1.0->datasets)
+  Downloading attrs-25.4.0-py3-none-any.whl.metadata (10 kB)
+Collecting frozenlist>=1.1.1 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.10.0,>=2023.1.0->datasets)
+  Downloading frozenlist-1.8.0-cp311-cp311-win_amd64.whl.metadata (21 kB)
+Collecting multidict<7.0,>=4.5 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.10.0,>=2023.1.0->datasets)
+  Downloading multidict-6.7.1-cp311-cp311-win_amd64.whl.metadata (5.5 kB)
+Collecting propcache>=0.2.0 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.10.0,>=2023.1.0->datasets)
+  Downloading propcache-0.4.1-cp311-cp311-win_amd64.whl.metadata (14 kB)
+Collecting yarl<2.0,>=1.17.0 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2025.10.0,>=2023.1.0->datasets)
+  Downloading yarl-1.22.0-cp311-cp311-win_amd64.whl.metadata (77 kB)
+Requirement already satisfied: charset_normalizer<4,>=2 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from requests>=2.32.2->datasets) (3.4.4)
+Requirement already satisfied: urllib3<3,>=1.21.1 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from requests>=2.32.2->datasets) (2.6.2)
+Requirement already satisfied: colorama in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from tqdm>=4.66.3->datasets) (0.4.6)
+Requirement already satisfied: python-dateutil>=2.8.2 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from pandas->datasets) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from pandas->datasets) (2025.2)
+Requirement already satisfied: tzdata>=2022.7 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from pandas->datasets) (2025.3)
+Requirement already satisfied: six>=1.5 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from python-dateutil>=2.8.2->pandas->datasets) (1.17.0)
+Collecting typer>=0.24.0 (from typer-slim->huggingface-hub<2.0,>=0.25.0->datasets)
+  Downloading typer-0.24.0-py3-none-any.whl.metadata (16 kB)
+Collecting click>=8.2.1 (from typer>=0.24.0->typer-slim->huggingface-hub<2.0,>=0.25.0->datasets)
+  Downloading click-8.3.1-py3-none-any.whl.metadata (2.6 kB)
+Collecting rich>=12.3.0 (from typer>=0.24.0->typer-slim->huggingface-hub<2.0,>=0.25.0->datasets)
+  Downloading rich-14.3.2-py3-none-any.whl.metadata (18 kB)
+Collecting annotated-doc>=0.0.2 (from typer>=0.24.0->typer-slim->huggingface-hub<2.0,>=0.25.0->datasets)
+  Downloading annotated_doc-0.0.4-py3-none-any.whl.metadata (6.6 kB)
+Collecting markdown-it-py>=2.2.0 (from rich>=12.3.0->typer>=0.24.0->typer-slim->huggingface-hub<2.0,>=0.25.0->datasets)
+  Downloading markdown_it_py-4.0.0-py3-none-any.whl.metadata (7.3 kB)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in c:\users\simon\anaconda3\envs\seismic\lib\site-packages (from rich>=12.3.0->typer>=0.24.0->typer-slim->huggingface-hub<2.0,>=0.25.0->datasets) (2.19.2)
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=12.3.0->typer>=0.24.0->typer-slim->huggingface-hub<2.0,>=0.25.0->datasets)
+  Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Downloading datasets-4.5.0-py3-none-any.whl (515 kB)
+Downloading dill-0.4.0-py3-none-any.whl (119 kB)
+Downloading fsspec-2025.10.0-py3-none-any.whl (200 kB)
+Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+Downloading huggingface_hub-1.4.1-py3-none-any.whl (553 kB)
+   ---------------------------------------- 0.0/553.3 kB ? eta -:--:--   ---------------------------------------- 553.3/553.3 kB 19.4 MB/s  0:00:00
+Downloading hf_xet-1.2.0-cp37-abi3-win_amd64.whl (2.9 MB)
+   ---------------------------------------- 0.0/2.9 MB ? eta -:--:--   ---------------------------------------- 2.9/2.9 MB 18.7 MB/s  0:00:00
+Downloading multiprocess-0.70.18-py311-none-any.whl (144 kB)
+Downloading aiohttp-3.13.3-cp311-cp311-win_amd64.whl (457 kB)
+Downloading multidict-6.7.1-cp311-cp311-win_amd64.whl (45 kB)
+Downloading yarl-1.22.0-cp311-cp311-win_amd64.whl (86 kB)
+Downloading aiohappyeyeballs-2.6.1-py3-none-any.whl (15 kB)
+Downloading aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
+Downloading attrs-25.4.0-py3-none-any.whl (67 kB)
+Downloading frozenlist-1.8.0-cp311-cp311-win_amd64.whl (44 kB)
+Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+Downloading propcache-0.4.1-cp311-cp311-win_amd64.whl (41 kB)
+Downloading pyyaml-6.0.3-cp311-cp311-win_amd64.whl (158 kB)
+Downloading tqdm-4.67.3-py3-none-any.whl (78 kB)
+Downloading anyio-4.12.1-py3-none-any.whl (113 kB)
+Downloading filelock-3.24.3-py3-none-any.whl (24 kB)
+Downloading shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+Downloading typer_slim-0.24.0-py3-none-any.whl (3.4 kB)
+Downloading typer-0.24.0-py3-none-any.whl (56 kB)
+Downloading annotated_doc-0.0.4-py3-none-any.whl (5.3 kB)
+Downloading click-8.3.1-py3-none-any.whl (108 kB)
+Downloading rich-14.3.2-py3-none-any.whl (309 kB)
+Downloading markdown_it_py-4.0.0-py3-none-any.whl (87 kB)
+Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Downloading xxhash-3.6.0-cp311-cp311-win_amd64.whl (31 kB)
+Installing collected packages: xxhash, tqdm, shellingham, pyyaml, propcache, multidict, mdurl, hf-xet, h11, fsspec, frozenlist, filelock, dill, click, attrs, anyio, annotated-doc, aiohappyeyeballs, yarl, multiprocess, markdown-it-py, httpcore, aiosignal, rich, httpx, aiohttp, typer, typer-slim, huggingface-hub, datasets
+   - --------------------------------------  1/30 [tqdm]   ---- -----------------------------------  3/30 [pyyaml]   -------- -------------------------------  6/30 [mdurl]  Attempting uninstall: fsspec
+   -------- -------------------------------  6/30 [mdurl]    Found existing installation: fsspec 2026.2.0
+   -------- -------------------------------  6/30 [mdurl]   ------------ ---------------------------  9/30 [fsspec]    Uninstalling fsspec-2026.2.0:
+   ------------ ---------------------------  9/30 [fsspec]      Successfully uninstalled fsspec-2026.2.0
+   ------------ ---------------------------  9/30 [fsspec]   ------------ ---------------------------  9/30 [fsspec]   ------------ ---------------------------  9/30 [fsspec]   ------------ ---------------------------  9/30 [fsspec]   ---------------- ----------------------- 12/30 [dill]   ---------------- ----------------------- 12/30 [dill]   ----------------- ---------------------- 13/30 [click]   ----------------- ---------------------- 13/30 [click]   ------------------ --------------------- 14/30 [attrs]   -------------------- ------------------- 15/30 [anyio]   -------------------- ------------------- 15/30 [anyio]   ------------------------ --------------- 18/30 [yarl]   ------------------------- -------------- 19/30 [multiprocess]   ------------------------- -------------- 19/30 [multiprocess]   -------------------------- ------------- 20/30 [markdown-it-py]   -------------------------- ------------- 20/30 [markdown-it-py]   ---------------------------- ----------- 21/30 [httpcore]   ----------------------------- ---------- 22/30 [aiosignal]   ------------------------------ --------- 23/30 [rich]   ------------------------------ --------- 23/30 [rich]   ------------------------------ --------- 23/30 [rich]   ------------------------------ --------- 23/30 [rich]   -------------------------------- ------- 24/30 [httpx]   --------------------------------- ------ 25/30 [aiohttp]   --------------------------------- ------ 25/30 [aiohttp]   --------------------------------- ------ 25/30 [aiohttp]   --------------------------------- ------ 25/30 [aiohttp]   ---------------------------------- ----- 26/30 [typer]   ------------------------------------- -- 28/30 [huggingface-hub]   ------------------------------------- -- 28/30 [huggingface-hub]   ------------------------------------- -- 28/30 [huggingface-hub]   ------------------------------------- -- 28/30 [huggingface-hub]   ------------------------------------- -- 28/30 [huggingface-hub]   ------------------------------------- -- 28/30 [huggingface-hub]   ------------------------------------- -- 28/30 [huggingface-hub]   -------------------------------------- - 29/30 [datasets]   -------------------------------------- - 29/30 [datasets]   -------------------------------------- - 29/30 [datasets]   -------------------------------------- - 29/30 [datasets]   -------------------------------------- - 29/30 [datasets]   -------------------------------------- - 29/30 [datasets]   -------------------------------------- - 29/30 [datasets]   ---------------------------------------- 30/30 [datasets]
+Successfully installed aiohappyeyeballs-2.6.1 aiohttp-3.13.3 aiosignal-1.4.0 annotated-doc-0.0.4 anyio-4.12.1 attrs-25.4.0 click-8.3.1 datasets-4.5.0 dill-0.4.0 filelock-3.24.3 frozenlist-1.8.0 fsspec-2025.10.0 h11-0.16.0 hf-xet-1.2.0 httpcore-1.0.9 httpx-0.28.1 huggingface-hub-1.4.1 markdown-it-py-4.0.0 mdurl-0.1.2 multidict-6.7.1 multiprocess-0.70.18 propcache-0.4.1 pyyaml-6.0.3 rich-14.3.2 shellingham-1.5.4 tqdm-4.67.3 typer-0.24.0 typer-slim-0.24.0 xxhash-3.6.0 yarl-1.22.0

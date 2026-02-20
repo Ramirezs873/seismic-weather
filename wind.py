@@ -46,22 +46,41 @@ def read_data(path,
     return df
 
 
-def plot_wind_speed(data, year, month):
+def plot_wind_speed(data, year=None, month=None):
 
     """
     Plots the wind speed for a given year and month from the provided DataFrame.
 
     Parameters:
         data (pd.DataFrame): The DataFrame containing the weather station data.
-        year (int): The year for plotting (2010-2025).
-        month (int): The month for plotting (1-12).
+        year (int): The year for plotting (2010-2025 or None for all years).
+        month (int or tuple): The month(s) for plotting.
+                              None for the entire year,
+                              A single month (1-12),
+                              or a tuple of (start_month, end_month) for a range of months.
     """
 
-    df_slice = data[(data['datetime'].dt.year == year) &
-                    (data['datetime'].dt.month == month)].copy()
+    
+    if isinstance(year, (tuple, list)) and len(year) == 2: 
+        start_year, end_year = year 
+        df_slice = data[(data['datetime'].dt.year >= start_year) & 
+                        (data['datetime'].dt.year <= end_year) ].copy()
+    elif year is None or year < 2010 or year > 2025:
+        df_slice = data.copy()
+    else:
+        df_slice = data[data['datetime'].dt.year == year].copy()
+        
 
-    if df_slice.empty:
-        print(f"No data available for {year}-{month:02d}")
+    if isinstance(month, (tuple, list)) and len(month) == 2: 
+        start_month, end_month = month 
+        df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                        (df_slice['datetime'].dt.month <= end_month) ].copy()
+    elif isinstance(month, int): 
+        df_slice = df_slice[df_slice['datetime'].dt.month == month].copy()
+    
+
+    if df_slice.empty: 
+        print("No data available for the selected time period.") 
         return
 
     # Convert to numeric
@@ -74,7 +93,17 @@ def plot_wind_speed(data, year, month):
     plt.plot(df_slice['datetime'], df_slice['Wind speed in km/h'], 
             color='black', linewidth=0.5)
     ymax = np.max(df_slice['Wind speed in km/h'])
-    plt.title(f'Wind Speed at Station:{df_slice["Station Number"].iloc[0]} @ {year}-{month:02d}')
+    
+    if isinstance(year, (tuple, list)): 
+        plt.title(f"Wind Speed at Station {df_slice['Station Number'].iloc[0]} @ {year[0]} to {year[1]}")
+    elif year is None:
+        plt.title(f'Wind Speed at Station:{df_slice["Station Number"].iloc[0]} @ All Years')
+    elif month is not None and isinstance(month, (tuple, list)): 
+        plt.title(f'Wind Speed at Station:{df_slice["Station Number"].iloc[0]} @ {year}-{month[0]} to {month[1]}')
+    elif month is None:
+        plt.title(f'Wind Speed at Station:{df_slice["Station Number"].iloc[0]} @ {year}')
+    else:
+        plt.title(f'Wind Speed at Station:{df_slice["Station Number"].iloc[0]} @ {year}-{month:02d}')
     plt.ylabel('Wind Speed (km/h)')
     plt.xlabel('Year')
     plt.ylim(0, ymax + 10)
@@ -82,23 +111,43 @@ def plot_wind_speed(data, year, month):
     plt.tight_layout()
     plt.show()
 
-def plot_rose_wind(data, year, month):
+def plot_rose_wind(data, year=None, month=None):
 
     """
     Plots a rose plot for wind speed and direction for a given year and month from the provided DataFrame.
 
     Parameters:
         data (pd.DataFrame): The DataFrame containing the weather station data.
-        year (int): The year for plotting (2010-2025).
-        month (int): The month for plotting (1-12).
+        year (int or tuple): The year(s) for plotting.
+                             None for all years, 
+                             A single year (2010-2025), 
+                             or a tuple of (start_year, end_year) for a range of years.
+        month (int or tuple): The month(s) for plotting.
+                              None for the entire year,
+                              A single month (1-12),
+                              or a tuple of (start_month, end_month) for a range of months.
     """
 
-    
-    df_slice = data[(data['datetime'].dt.year == year) &
-                    (data['datetime'].dt.month == month)].copy()
+    if isinstance(year, (tuple, list)) and len(year) == 2: 
+        start_year, end_year = year 
+        df_slice = data[(data['datetime'].dt.year >= start_year) & 
+                        (data['datetime'].dt.year <= end_year) ].copy()
+    elif year is None or year < 2010 or year > 2025:
+        df_slice = data.copy()
+    else:
+        df_slice = data[data['datetime'].dt.year == year].copy()
+        
 
-    if df_slice.empty:
-        print(f"No data available for {year}-{month:02d}")
+    if isinstance(month, (tuple, list)) and len(month) == 2: 
+        start_month, end_month = month 
+        df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                        (df_slice['datetime'].dt.month <= end_month) ].copy()
+    elif isinstance(month, int): 
+        df_slice = df_slice[df_slice['datetime'].dt.month == month].copy()
+    
+
+    if df_slice.empty: 
+        print("No data available for the selected time period.") 
         return
 
     # Convert to numeric
@@ -124,10 +173,31 @@ def plot_rose_wind(data, year, month):
     freq['percentage'] = 100 * freq['count'] / freq['count'].sum()
 
     fig = px.bar_polar(freq, r="percentage", theta="dir_bin", color="speed_bin", color_continuous_scale=px.colors.sequential.Plasma)
-
-    fig.update_layout(title=f'Wind Rose at Station:{df_slice["Station Number"].iloc[0]} @ {year}-{month:02d}', 
-                      polar=dict(radialaxis=dict(tickformat=".0f%", ticksuffix="%",
-                      angle=90,
-                      side="counterclockwise")))
     
+    if isinstance(year, (tuple, list)): 
+        fig.update_layout(title=f'Wind Rose at Station:{df_slice["Station Number"].iloc[0]}  @ {year[0]} to {year[1]}',
+                          polar=dict(radialaxis=dict(tickformat=".0f%", ticksuffix="%",
+                                                     angle=90,
+                                                     side="counterclockwise")))
+    elif year is None:
+        fig.update_layout(title=f'Wind Rose at Station:{df_slice["Station Number"].iloc[0]} @ All Years', 
+                          polar=dict(radialaxis=dict(tickformat=".0f%", ticksuffix="%",
+                                                     angle=90,
+                                                     side="counterclockwise")))
+    elif isinstance(month, (tuple, list)): 
+        fig.update_layout(title=f'Wind Rose at Station:{df_slice["Station Number"].iloc[0]}  @ {year}-{month[0]} to {month[1]}',
+                          polar=dict(radialaxis=dict(tickformat=".0f%", ticksuffix="%",
+                                                     angle=90,
+                                                     side="counterclockwise")))
+    elif month is None:
+        fig.update_layout(title=f'Wind Rose at Station:{df_slice["Station Number"].iloc[0]} @ {year}', 
+                          polar=dict(radialaxis=dict(tickformat=".0f%", ticksuffix="%",
+                                                     angle=90,
+                                                     side="counterclockwise")))
+    else:
+        fig.update_layout(title=f'Wind Rose at Station:{df_slice["Station Number"].iloc[0]} @ {year}-{month:02d}', 
+                          polar=dict(radialaxis=dict(tickformat=".0f%", ticksuffix="%",
+                                                     angle=90,
+                                                     side="counterclockwise")))
+
     fig.show()

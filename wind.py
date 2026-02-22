@@ -31,17 +31,17 @@ def read_data(path,
     if pq_path.exists():
         df = pd.read_parquet(pq_path)
     elif csv_path.exists():
-        df = pd.read_csv(csv_path, parse_dates=['datetime'])
+        df = pd.read_csv(csv_path, low_memory=False)
     else:
         raise FileNotFoundError(f"No data file found for station {station_code} and id {id_code}")
 
-    df = pd.read_csv(csv_path, low_memory=False)
-    df["datetime"] = pd.to_datetime(dict(
-                                    year=df["Year Month Day Hour Minutes in YYYY.2"],
-                                    month=df["MM.2"],
-                                    day=df["DD.2"],
-                                    hour=df["HH24.2"],
-                                    minute=df["MI format in Universal coordinated time"]))
+    if "datetime" not in df.columns:
+        df["datetime"] = pd.to_datetime(dict(
+                                        year=df["Year Month Day Hour Minutes in YYYY.2"],
+                                        month=df["MM.2"],
+                                        day=df["DD.2"],
+                                        hour=df["HH24.2"],
+                                        minute=df["MI format in Universal coordinated time"]))
 
     return df
 

@@ -46,7 +46,10 @@ def read_data(path,
     return df
 
 
-def plot_wind_speed(data, year=None, month=None, day=None):
+def plot_wind_speed(data, 
+                    year=None, 
+                    month=None, 
+                    day=None):
 
     """
     Plots the wind speed for a given year and month from the provided DataFrame.
@@ -138,7 +141,10 @@ def plot_wind_speed(data, year=None, month=None, day=None):
     plt.tight_layout()
     plt.show()
 
-def plot_rose_wind(data, year=None, month=None, day=None):
+def plot_rose_wind(data, 
+                   year=None, 
+                   month=None, 
+                   day=None):
 
     """
     Plots a rose plot for wind speed and direction for a given year and month from the provided DataFrame.
@@ -251,3 +257,114 @@ def plot_rose_wind(data, year=None, month=None, day=None):
     )
 
     fig.show()
+
+def compare_seismic_wind(seismic_data, 
+                         wind_data, 
+                         wind_year=None,
+                         wind_month=None,
+                         wind_day=None):
+    
+    """
+    Compares seismic data with wind data by plotting the North-South and East-West components of both datasets.
+    Inspection is only useful for identical time periods but the process works for unrelated time periods. 
+    For useful comparisons, trim the seismic data to the same time period you specify for the wind data.
+    Parameters:
+    seismic_data (dict): A dictionary containing seismic data with isolated components for each station.
+    wind_data (pd.DataFrame): A DataFrame containing the wind data.
+    wind_year (int or tuple): The year(s) for filtering the wind data. 
+                             None for all years, 
+                             A single year (2010-2025), 
+                             or a tuple of (start_year, end_year) for a range of years.
+    wind_month (int or tuple): The month(s) for filtering the wind data. 
+                              None for the entire year, 
+                              A single month (1-12), 
+                              or a tuple of (start_month, end_month) for a range of months.
+    wind_day (int or tuple): The day(s) for filtering the wind data. 
+                            None for the entire month,
+                            A single day (1-31),
+                            or a tuple of (start_day, end_day) for a range of days.
+    """
+    
+    if isinstance(wind_year, (tuple, list)) and len(wind_year) == 2: 
+        start_year, end_year = wind_year 
+        df_slice = wind_data[(wind_data['datetime'].dt.year >= start_year) & 
+                        (wind_data['datetime'].dt.year <= end_year) ].copy()
+    elif wind_year is None or wind_year < 2010 or wind_year > 2025:
+        df_slice = wind_data.copy()
+    else:
+        df_slice = wind_data[wind_data['datetime'].dt.year == wind_year].copy()
+        
+
+    if isinstance(wind_month, (tuple, list)) and len(wind_month) == 2: 
+        start_month, end_month = wind_month 
+        df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                        (df_slice['datetime'].dt.month <= end_month) ].copy()
+    elif isinstance(wind_month, int): 
+        df_slice = df_slice[df_slice['datetime'].dt.month == wind_month].copy()
+
+    if isinstance(wind_day, (tuple, list)) and len(wind_day) == 2:
+        start_day, end_day = wind_day
+        df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
+                            (df_slice['datetime'].dt.day <= end_day)].copy()
+    elif isinstance(wind_day, int):
+        df_slice = df_slice[df_slice['datetime'].dt.day == wind_day].copy()
+    
+
+    if df_slice.empty: 
+        print("No wind data available for the selected time period.") 
+        return
+
+    # Convert to numeric
+    df_slice['Wind speed in km/h'] = pd.to_numeric(df_slice['Wind speed in km/h'], 
+                                                    errors='coerce')
+    df_slice['Wind direction in degrees true'] = pd.to_numeric(df_slice['Wind direction in degrees true'],
+                                                               errors='coerce')
+    df_slice['Wind direction in degrees true'] %= 360
+
+    wind_speed = df_slice['Wind speed in km/h']
+    df_slice['Wind_norm'] = wind_speed / wind_speed.max()
+
+    WD = df_slice['Wind direction in degrees true']
+    WS = df_slice['Wind_norm']
+
+    u = []
+    v = []
+    for i in range(len(WS)):
+    # North-South component
+        u.append(WS.iloc[i] * np.cos(np.deg2rad(WD.iloc[i])))
+    # East-West component
+        v.append(WS.iloc[i] * np.sin(np.deg2rad(WD.iloc[i])))
+
+    fig, ax = plt.subplots(8, 2, figsize=(15,30))
+    ymax = max(max(u), max(v))
+    ymin = min(min(u), min(v))
+    ax[0,0].set_ylim(ymin-(0.1*abs(ymin)), ymax+(0.1*abs(ymax)))
+    ax[0,0].plot(u)
+    ax[0,0].set_title('North-South Wind Speed')
+    ax[0,0].set_xlabel(r'Time')
+
+    ax[0,1].set_ylim(ymin-(0.1*abs(ymin)), ymax+(0.1*abs(ymax)))
+    ax[0,1].plot(v)
+    ax[0,1].set_title('East-West Wind Speed')
+    ax[0,1].set_xlabel(r'Time')
+    
+    stations = list(seismic_data.keys())
+    for i, k in enumerate(stations):
+        # North component
+        ax[i+1, 0].set_ylim(-0.8, 0.8)
+        ax[i+1, 0].plot(seismic_data[f'{k}'][1])
+        ax[i+1, 0].set_title(f'North-South Seismic {k}')
+        ax[i+1, 0].set_xlabel(r'Time')
+
+        # East component
+        ax[i+1, 1].set_ylim(-0.8, 0.8)
+        ax[i+1, 1].plot(seismic_data[f'{k}'][0])
+        ax[i+1, 1].set_title(f'East-West Seismic {k}')
+        ax[i+1, 1].set_xlabel(r'Time')
+
+    plt.tight_layout()
+    plt.show()
+
+
+
+

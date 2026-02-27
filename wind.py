@@ -349,15 +349,21 @@ def compare_seismic_wind(seismic_data,
     ax[0,1].set_xlabel(r'Time')
     
     stations = list(seismic_data.keys())
+    seismic_ymax = max(seismic_data[stations[0]].max(),
+                       seismic_data[stations[1]].max())
+
+    seismic_ymin = min(seismic_data[stations[0]].min(),
+                       seismic_data[stations[1]].min())
+
     for i, k in enumerate(stations):
         # North component
-        ax[i+1, 0].set_ylim(-0.8, 0.8)
+        ax[i+1, 0].set_ylim(seismic_ymin-(0.2*abs(seismic_ymin)), seismic_ymax+(0.2*abs(seismic_ymax)))
         ax[i+1, 0].plot(seismic_data[f'{k}'][1])
         ax[i+1, 0].set_title(f'North-South Seismic {k}')
         ax[i+1, 0].set_xlabel(r'Time')
 
         # East component
-        ax[i+1, 1].set_ylim(-0.8, 0.8)
+        ax[i+1, 1].set_ylim(seismic_ymin-(0.2*abs(seismic_ymin)), seismic_ymax+(0.2*abs(seismic_ymax)))
         ax[i+1, 1].plot(seismic_data[f'{k}'][0])
         ax[i+1, 1].set_title(f'East-West Seismic {k}')
         ax[i+1, 1].set_xlabel(r'Time')

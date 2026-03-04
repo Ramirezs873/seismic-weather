@@ -3,6 +3,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 import numpy as np
 import plotly.express as px
+from obspy.signal.util import smooth
 
 
 def read_data(path, 
@@ -49,22 +50,32 @@ def read_data(path,
 def plot_wind_speed(data, 
                     year=None, 
                     month=None, 
-                    day=None):
+                    day=None,
+                    apply_smooth = True,
+                    smoothie = 3):
 
     """
     Plots the wind speed for a given year and month from the provided DataFrame.
 
     Parameters:
-        data (pd.DataFrame): The DataFrame containing the weather station data.
-        year (int): The year for plotting (2010-2025 or None for all years).
-        month (int or tuple): The month(s) for plotting.
-                              None for the entire year,
-                              A single month (1-12),
-                              or a tuple of (start_month, end_month) for a range of months.
-        day (int or tuple): The day(s) for plotting.
-                            None for the entire month,
-                            A single day (1-31),
-                            or a tuple of (start_day, end_day) for a range of days.
+    data (pd.DataFrame): 
+        The DataFrame containing the weather station data.
+    year (int): 
+        The year for plotting (2010-2025 or None for all years).
+    month (int or tuple): 
+        The month(s) for plotting.
+        None for the entire year,
+        A single month (1-12),
+        or a tuple of (start_month, end_month) for a range of months.
+    day (int or tuple): 
+        The day(s) for plotting.
+        None for the entire month,
+        A single day (1-31),
+        or a tuple of (start_day, end_day) for a range of days.
+    apply_smooth (bool): 
+        True/False. Applying ObsPy smooth() function.
+    smoothie (int):
+        Number of values to calculate moving average for smoothing.
     """
 
     
@@ -103,10 +114,17 @@ def plot_wind_speed(data,
     wind_speed = df_slice['Wind speed in km/h']
     df_slice['Wind_norm'] = wind_speed / wind_speed.max()
 
+    # Smoothing
+    if apply_smooth == True:
+        wind_speed = smooth(wind_speed.to_numpy(), smoothie)
+    else:
+        wind_speed = wind_speed.to_numpy()
+        
     plt.figure(figsize=(15,6))
-    plt.plot(df_slice['datetime'], df_slice['Wind speed in km/h'], 
+    
+    plt.plot(df_slice['datetime'], wind_speed, 
             color='black', linewidth=0.5)
-    ymax = np.max(df_slice['Wind speed in km/h'])
+    ymax = np.max(wind_speed)
     
     # Title construction
     title = f"Wind Speed at Station {df_slice['Station Number'].iloc[0]} for "
@@ -262,27 +280,44 @@ def compare_seismic_wind(seismic_data,
                          wind_data, 
                          wind_year=None,
                          wind_month=None,
-                         wind_day=None):
+                         wind_day=None,
+                         apply_wind_smooth = True,
+                         wind_smoothie = 3,
+                         apply_seismic_smooth = True,
+                         seismic_smoothie = 3):
     
     """
     Compares seismic data with wind data by plotting the North-South and East-West components of both datasets.
     Inspection is only useful for identical time periods but the process works for unrelated time periods. 
     For useful comparisons, trim the seismic data to the same time period you specify for the wind data.
     Parameters:
-    seismic_data (dict): A dictionary containing seismic data with isolated components for each station.
-    wind_data (pd.DataFrame): A DataFrame containing the wind data.
-    wind_year (int or tuple): The year(s) for filtering the wind data. 
-                             None for all years, 
-                             A single year (2010-2025), 
-                             or a tuple of (start_year, end_year) for a range of years.
-    wind_month (int or tuple): The month(s) for filtering the wind data. 
-                              None for the entire year, 
-                              A single month (1-12), 
-                              or a tuple of (start_month, end_month) for a range of months.
-    wind_day (int or tuple): The day(s) for filtering the wind data. 
-                            None for the entire month,
-                            A single day (1-31),
-                            or a tuple of (start_day, end_day) for a range of days.
+    seismic_data (dict): 
+        A dictionary containing seismic data with isolated components for each station.
+    wind_data (pd.DataFrame): 
+        A DataFrame containing the wind data.
+    wind_year (int or tuple): 
+        The year(s) for filtering the wind data. 
+        None for all years, 
+        A single year (2010-2025), 
+        or a tuple of (start_year, end_year) for a range of years.
+    wind_month (int or tuple): 
+        The month(s) for filtering the wind data. 
+        None for the entire year, 
+        A single month (1-12), 
+        or a tuple of (start_month, end_month) for a range of months.
+    wind_day (int or tuple): 
+        The day(s) for filtering the wind data. 
+        None for the entire month,
+        A single day (1-31),
+        or a tuple of (start_day, end_day) for a range of days.
+    apply_wind_smooth (bool): 
+        True/False. Applying ObsPy smooth() function to wind data.
+    wind_smoothie (int):
+        Number of values to calculate moving average for wind smoothing.
+    apply_seismic_smooth (bool): 
+        True/False. Applying ObsPy smooth() function to seismic data.
+    seismic_smoothie (int):
+        Number of values to calculate moving average for seismic smoothing.
     """
     
     if isinstance(wind_year, (tuple, list)) and len(wind_year) == 2: 
@@ -325,17 +360,26 @@ def compare_seismic_wind(seismic_data,
     df_slice['Wind_norm'] = wind_speed / wind_speed.max()
 
     WD = df_slice['Wind direction in degrees true']
-    WS = df_slice['Wind_norm']
+    #WS = df_slice['Wind_norm']
+    WS = wind_speed
 
     u = []
     v = []
     for i in range(len(WS)):
     # North-South component
-        u.append(WS.iloc[i] * np.cos(np.deg2rad(WD.iloc[i])))
+        u.append(-WS.iloc[i] * np.cos(np.deg2rad(WD.iloc[i])))
     # East-West component
-        v.append(WS.iloc[i] * np.sin(np.deg2rad(WD.iloc[i])))
+        v.append(-WS.iloc[i] * np.sin(np.deg2rad(WD.iloc[i])))
 
-    fig, ax = plt.subplots(8, 2, figsize=(15,30))
+    # Wind Smoothing
+    if apply_wind_smooth == True:
+        u = smooth(u, wind_smoothie)
+        v = smooth(v, wind_smoothie)
+    
+    stations = list(seismic_data.keys())
+    nrows = len(stations) + 1
+
+    fig, ax = plt.subplots(nrows, 2, figsize=(6*nrows, 5))
     ymax = max(max(u), max(v))
     ymin = min(min(u), min(v))
     ax[0,0].set_ylim(ymin-(0.1*abs(ymin)), ymax+(0.1*abs(ymax)))
@@ -348,12 +392,17 @@ def compare_seismic_wind(seismic_data,
     ax[0,1].set_title('East-West Wind Speed')
     ax[0,1].set_xlabel(r'Time')
     
-    stations = list(seismic_data.keys())
     seismic_ymax = []
     seismic_ymin = []
     for k in range(len(stations)):
-        EW = seismic_data[stations[k]][0]
-        NS = seismic_data[stations[k]][1]
+        # Seismic Smoothing
+        if apply_seismic_smooth == True:
+            EW = smooth(seismic_data[stations[k]][0], seismic_smoothie)
+            NS = smooth(seismic_data[stations[k]][1], seismic_smoothie)
+        else:
+            EW = seismic_data[stations[k]][0]
+            NS = seismic_data[stations[k]][1]
+
         seismic_ymax.append(max(EW.max(), NS.max()))
         seismic_ymin.append(min(EW.min(), NS.min()))
 
@@ -361,15 +410,23 @@ def compare_seismic_wind(seismic_data,
     seismic_ymin = min(seismic_ymin)
 
     for i, k in enumerate(stations):
+        t = seismic_data[k][2]
+        # Seismic Smoothing
+        if apply_seismic_smooth:
+            EW = smooth(seismic_data[k][0], seismic_smoothie)
+            NS = smooth(seismic_data[k][1], seismic_smoothie)
+        else:
+            EW = seismic_data[k][0]
+            NS = seismic_data[k][1]
         # North component
         ax[i+1, 0].set_ylim(seismic_ymin-(0.2*abs(seismic_ymin)), seismic_ymax+(0.2*abs(seismic_ymax)))
-        ax[i+1, 0].plot(seismic_data[k][1])
+        ax[i+1, 0].plot(t, NS)
         ax[i+1, 0].set_title(f'North-South Seismic {k}')
         ax[i+1, 0].set_xlabel(r'Time')
 
         # East component
         ax[i+1, 1].set_ylim(seismic_ymin-(0.2*abs(seismic_ymin)), seismic_ymax+(0.2*abs(seismic_ymax)))
-        ax[i+1, 1].plot(seismic_data[k][0])
+        ax[i+1, 1].plot(t, EW)
         ax[i+1, 1].set_title(f'East-West Seismic {k}')
         ax[i+1, 1].set_xlabel(r'Time')
 

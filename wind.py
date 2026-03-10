@@ -158,15 +158,15 @@ def plot_wind_speed(data,
 
     # Day
     if isinstance(day, (tuple, list)):
-        title += f", and Days:{day[0]} to {day[1]}"
+        title += f", Days:{day[0]} to {day[1]}"
     elif isinstance(day, int):
-        title += f", and Day:{day}"
+        title += f", Day:{day}"
 
     # Hour
     if isinstance(hour, (tuple, list)):
-        title += f", and Days:{hour[0]} to {hour[1]}"
+        title += f", Hours:{hour[0]} to {hour[1]}"
     elif isinstance(hour, int):
-        title += f", and Day:{hour}"
+        title += f", Hour:{hour}"
 
     plt.title(title)
 
@@ -284,15 +284,15 @@ def plot_rose_wind(data,
 
     # Day
     if isinstance(day, (tuple, list)):
-        title += f", and Days:{day[0]} to {day[1]}"
+        title += f", Days:{day[0]} to {day[1]}"
     elif isinstance(day, int):
-        title += f", and Day:{day}"
+        title += f", Day:{day}"
 
     # Hour
     if isinstance(hour, (tuple, list)):
-        title += f", and Days:{hour[0]} to {hour[1]}"
+        title += f", Hours:{hour[0]} to {hour[1]}"
     elif isinstance(hour, int):
-        title += f", and Day:{hour}"
+        title += f", Hour:{hour}"
 
     #Figure 
     fig = px.bar_polar(freq, r="percentage", theta="dir_bin", color="speed_bin", color_continuous_scale=px.colors.sequential.Plasma)
@@ -454,7 +454,7 @@ def compare_seismic_wind(seismic_data,
     seismic_ymin = min(seismic_ymin)
 
     for i, k in enumerate(stations):
-        t = seismic_data[k][2]
+        #t = seismic_data[k][2]
         # Seismic Smoothing
         if apply_seismic_smooth:
             EW = smooth(seismic_data[k][0], seismic_smoothie)
@@ -464,13 +464,13 @@ def compare_seismic_wind(seismic_data,
             NS = seismic_data[k][1]
         # North component
         ax[i+1, 0].set_ylim(seismic_ymin-(0.2*abs(seismic_ymin)), seismic_ymax+(0.2*abs(seismic_ymax)))
-        ax[i+1, 0].plot(t, NS)
+        ax[i+1, 0].plot(NS)
         ax[i+1, 0].set_title(f'North-South Seismic {k}')
         ax[i+1, 0].set_xlabel(r'Time')
 
         # East component
         ax[i+1, 1].set_ylim(seismic_ymin-(0.2*abs(seismic_ymin)), seismic_ymax+(0.2*abs(seismic_ymax)))
-        ax[i+1, 1].plot(t, EW)
+        ax[i+1, 1].plot(EW)
         ax[i+1, 1].set_title(f'East-West Seismic {k}')
         ax[i+1, 1].set_xlabel(r'Time')
 

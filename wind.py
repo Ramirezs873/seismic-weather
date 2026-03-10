@@ -51,6 +51,7 @@ def plot_wind_speed(data,
                     year=None, 
                     month=None, 
                     day=None,
+                    hour=None,
                     apply_smooth = True,
                     smoothie = 3):
 
@@ -72,6 +73,11 @@ def plot_wind_speed(data,
         None for the entire month,
         A single day (1-31),
         or a tuple of (start_day, end_day) for a range of days.
+    hour (int or tuple):
+        The hour(s) for plotting.
+        None for entire day,
+        A single hour (0-23),
+        or a tuple of (start_hour, end_hour) for a range of hours.
     apply_smooth (bool): 
         True/False. Applying ObsPy smooth() function.
     smoothie (int):
@@ -102,6 +108,13 @@ def plot_wind_speed(data,
                             (df_slice['datetime'].dt.day <= end_day)].copy()
     elif isinstance(day, int):
         df_slice = df_slice[df_slice['datetime'].dt.day == day].copy()
+
+    if isinstance(hour, (tuple, list)) and len(hour) == 2:
+        start_hour, end_hour = hour
+        df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                            (df_slice['datetime'].dt.hour <= end_hour)].copy()
+    elif isinstance(hour, int):
+        df_slice = df_slice[df_slice['datetime'].dt.hour == hour].copy()
     
 
     if df_slice.empty: 
@@ -149,6 +162,12 @@ def plot_wind_speed(data,
     elif isinstance(day, int):
         title += f", and Day:{day}"
 
+    # Hour
+    if isinstance(hour, (tuple, list)):
+        title += f", and Days:{hour[0]} to {hour[1]}"
+    elif isinstance(hour, int):
+        title += f", and Day:{hour}"
+
     plt.title(title)
 
     # Plotting 
@@ -162,7 +181,8 @@ def plot_wind_speed(data,
 def plot_rose_wind(data, 
                    year=None, 
                    month=None, 
-                   day=None):
+                   day=None,
+                   hour=None):
 
     """
     Plots a rose plot for wind speed and direction for a given year and month from the provided DataFrame.
@@ -181,6 +201,11 @@ def plot_rose_wind(data,
                             None for the entire month,
                             A single day (1-31),
                             or a tuple of (start_day, end_day) for a range of days.
+        hour (int or tuple):
+            The hour(s) for plotting.
+            None for entire day,
+            A single hour (0-23),
+            or a tuple of (start_hour, end_hour) for a range of hours.
     """
 
     if isinstance(year, (tuple, list)) and len(year) == 2: 
@@ -206,10 +231,14 @@ def plot_rose_wind(data,
                             (df_slice['datetime'].dt.day <= end_day)].copy()
     elif isinstance(day, int):
         df_slice = df_slice[df_slice['datetime'].dt.day == day].copy()
-    
 
+    if isinstance(hour, (tuple, list)) and len(hour) == 2:
+        start_hour, end_hour = hour
+        df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                            (df_slice['datetime'].dt.hour <= end_hour)].copy()
+    elif isinstance(hour, int):
+        df_slice = df_slice[df_slice['datetime'].dt.hour == hour].copy()
     
-
     if df_slice.empty: 
         print("No data available for the selected time period.") 
         return
@@ -259,6 +288,12 @@ def plot_rose_wind(data,
     elif isinstance(day, int):
         title += f", and Day:{day}"
 
+    # Hour
+    if isinstance(hour, (tuple, list)):
+        title += f", and Days:{hour[0]} to {hour[1]}"
+    elif isinstance(hour, int):
+        title += f", and Day:{hour}"
+
     #Figure 
     fig = px.bar_polar(freq, r="percentage", theta="dir_bin", color="speed_bin", color_continuous_scale=px.colors.sequential.Plasma)
 
@@ -281,6 +316,7 @@ def compare_seismic_wind(seismic_data,
                          wind_year=None,
                          wind_month=None,
                          wind_day=None,
+                         wind_hour=None,
                          apply_wind_smooth = True,
                          wind_smoothie = 3,
                          apply_seismic_smooth = True,
@@ -344,6 +380,14 @@ def compare_seismic_wind(seismic_data,
                             
     elif isinstance(wind_day, int):
         df_slice = df_slice[df_slice['datetime'].dt.day == wind_day].copy()
+
+    if isinstance(wind_hour, (tuple, list)) and len(wind_hour) == 2:
+        start_hour, end_hour = wind_hour
+        df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                            (df_slice['datetime'].dt.hour <= end_hour)].copy()
+    elif isinstance(wind_hour, int):
+        df_slice = df_slice[df_slice['datetime'].dt.hour == wind_hour].copy()
+    
     
     if df_slice.empty: 
         print("No wind data available for the selected time period.") 

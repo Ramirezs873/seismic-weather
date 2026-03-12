@@ -139,3 +139,6 @@ logs/
 .env
 .env.*
 *.env
+
+# setup
+config.yaml

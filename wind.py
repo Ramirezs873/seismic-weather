@@ -405,15 +405,15 @@ def compare_seismic_wind(seismic_data,
 
     WD = df_slice['Wind direction in degrees true']
     #WS = df_slice['Wind_norm']
-    WS = wind_speed
+    WS = abs(wind_speed)
 
     u = []
     v = []
     for i in range(len(WS)):
     # North-South component
-        u.append(-WS.iloc[i] * np.cos(np.deg2rad(WD.iloc[i])))
+        u.append(np.abs(WS.iloc[i] * np.cos(np.deg2rad(WD.iloc[i]))))
     # East-West component
-        v.append(-WS.iloc[i] * np.sin(np.deg2rad(WD.iloc[i])))
+        v.append(np.abs(WS.iloc[i] * np.sin(np.deg2rad(WD.iloc[i]))))
 
     # Wind Smoothing
     if apply_wind_smooth == True:
@@ -477,6 +477,87 @@ def compare_seismic_wind(seismic_data,
     plt.tight_layout()
     plt.show()
 
+def wind_vs_noise(seismic_data, 
+                         wind_data, 
+                         wind_year=None,
+                         wind_month=None,
+                         wind_day=None,
+                         wind_hour=None,):
+
+    if isinstance(wind_year, (tuple, list)) and len(wind_year) == 2: 
+        start_year, end_year = wind_year 
+        df_slice = wind_data[(wind_data['datetime'].dt.year >= start_year) & 
+                        (wind_data['datetime'].dt.year <= end_year) ].copy()
+    elif wind_year is None or wind_year < 2010 or wind_year > 2025:
+        df_slice = wind_data.copy()
+    else:
+        df_slice = wind_data[wind_data['datetime'].dt.year == wind_year].copy()
+        
+
+    if isinstance(wind_month, (tuple, list)) and len(wind_month) == 2: 
+        start_month, end_month = wind_month 
+        df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                        (df_slice['datetime'].dt.month <= end_month) ].copy()
+    elif isinstance(wind_month, int): 
+        df_slice = df_slice[df_slice['datetime'].dt.month == wind_month].copy()
+
+    if isinstance(wind_day, (tuple, list)) and len(wind_day) == 2:
+        start_day, end_day = wind_day
+        df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
+                            (df_slice['datetime'].dt.day <= end_day)].copy()
+                            
+    elif isinstance(wind_day, int):
+        df_slice = df_slice[df_slice['datetime'].dt.day == wind_day].copy()
+
+    if isinstance(wind_hour, (tuple, list)) and len(wind_hour) == 2:
+        start_hour, end_hour = wind_hour
+        df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                            (df_slice['datetime'].dt.hour <= end_hour)].copy()
+    elif isinstance(wind_hour, int):
+        df_slice = df_slice[df_slice['datetime'].dt.hour == wind_hour].copy()
+    
+    
+    if df_slice.empty: 
+        print("No wind data available for the selected time period.") 
+        return
+
+    # Convert to numeric
+    df_slice['Wind speed in km/h'] = pd.to_numeric(df_slice['Wind speed in km/h'], 
+                                                    errors='coerce')
+    df_slice['Wind direction in degrees true'] = pd.to_numeric(df_slice['Wind direction in degrees true'],
+                                                               errors='coerce')
+    df_slice['Wind direction in degrees true'] %= 360
+
+    wind_speed = df_slice['Wind speed in km/h']
+    
+    WS = abs(wind_speed)
+
+    # Fill out WS data by interpolation
+
+    stations = list(seismic_data.keys())
+    #nrows = len(stations) + 1
+
+
+    for i, k in enumerate(stations):
+        #t = seismic_data[k][2]
+        # Seismic Smoothing
+
+        EW = seismic_data[k][0]
+        NS = seismic_data[k][1]
+
+        H = np.sqrt(NS**2 + EW**2)
+
+        seismic_mag = np.abs(H)
+
+        WS_interp = np.interp(np.arange(len(seismic_mag)), np.linspace(0, len(seismic_mag), len(WS)),WS)
+        
+        plt.figure(figsize=(15,6)) 
+
+        plt.scatter(WS_interp, seismic_mag)
+
+
+
+    
 
 
 

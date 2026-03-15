@@ -328,7 +328,8 @@ def compare_seismic_wind(seismic_data,
                          apply_wind_smooth = True,
                          wind_smoothie = 3,
                          apply_seismic_smooth = True,
-                         seismic_smoothie = 3):
+                         seismic_smoothie = 3,
+                         rectify_seis = True):
     
     """
     Compares seismic data with wind data by plotting 
@@ -366,6 +367,8 @@ def compare_seismic_wind(seismic_data,
         True/False. Applying ObsPy smooth() function to seismic data.
     seismic_smoothie (int):
         Number of values to calculate moving average for seismic smoothing.
+    rectify_seis (bool):
+        True/False. Rectify seismic data.
     """
     
     # Check if time inputs are single valued or a range.
@@ -420,7 +423,7 @@ def compare_seismic_wind(seismic_data,
     wind_speed = df_slice['Wind speed in km/h']
 
     # WS_norm = df_slice['Wind_norm']
-    WS = abs(wind_speed)
+    WS = abs(wind_speed) # Rectified
 
     # Isolate North-South and East-West wind components
     # Create storage
@@ -461,23 +464,28 @@ def compare_seismic_wind(seismic_data,
     ax[0,1].set_title('East-West Wind Speed')
     ax[0,1].set_xlabel(r'Time')
     
+    # Processing waveform
     # Create storage for seismic y data
     seismic_ymax = []
     seismic_ymin = []
-
+    seismic_processed = {}
     # Isolate North-South and East-West seismic data
-    for k in range(len(stations)):
+    for station in stations:
+        # Data
+        EW = seismic_data[station][0]
+        NS = seismic_data[station][1]
+        # Rectify
+        if rectify_seis == True:
+            EW = np.abs(EW)
+            NS = np.abs(NS)
         # Seismic Smoothing
         if apply_seismic_smooth == True:
-            EW = smooth(seismic_data[stations[k]][0], seismic_smoothie)
-            NS = smooth(seismic_data[stations[k]][1], seismic_smoothie)
-        # Without smoothing
-        else:
-            EW = seismic_data[stations[k]][0]
-            NS = seismic_data[stations[k]][1]
+            EW = smooth(EW, seismic_smoothie)
+            NS = smooth(NS, seismic_smoothie)
         # Add to storage
         seismic_ymax.append(max(EW.max(), NS.max()))
         seismic_ymin.append(min(EW.min(), NS.min()))
+        seismic_processed[station] = (EW, NS)
 
     # Find maximum and minimum values 
     seismic_ymax = max(seismic_ymax)
@@ -486,14 +494,7 @@ def compare_seismic_wind(seismic_data,
     # Plot Seismic data
     for i, k in enumerate(stations):
         #t = seismic_data[k][2]
-        # Seismic Smoothing
-        if apply_seismic_smooth:
-            EW = smooth(seismic_data[k][0], seismic_smoothie)
-            NS = smooth(seismic_data[k][1], seismic_smoothie)
-        # Without Smoothing
-        else:
-            EW = seismic_data[k][0]
-            NS = seismic_data[k][1]
+        EW, NS = seismic_processed[k]
         # North-South component
         ax[i+1, 0].set_ylim(seismic_ymin-(0.2*abs(seismic_ymin)), seismic_ymax+(0.2*abs(seismic_ymax)))
         ax[i+1, 0].plot(NS)

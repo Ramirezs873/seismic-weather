@@ -482,7 +482,9 @@ def wind_vs_noise(seismic_data,
                          wind_year=None,
                          wind_month=None,
                          wind_day=None,
-                         wind_hour=None,):
+                         wind_hour=None,
+                         apply_smooth = True,
+                         smoothie = 100):
 
     if isinstance(wind_year, (tuple, list)) and len(wind_year) == 2: 
         start_year, end_year = wind_year 
@@ -541,28 +543,30 @@ def wind_vs_noise(seismic_data,
     for i, k in enumerate(stations):
         #t = seismic_data[k][2]
         # Seismic Smoothing
-
+        
         EW = seismic_data[k][0]
         NS = seismic_data[k][1]
 
         H = np.sqrt(NS**2 + EW**2)
 
+        if apply_smooth == True:
+            H = smooth(H, smoothie)
+
         seismic_mag = np.abs(H)
 
-        seis_low, seis_high = np.percentile(seismic_mag, [2, 98])
-        remove_seis_outliers = ((seismic_mag >= seis_low) & (seismic_mag <= seis_high))
+        #seis_low, seis_high = np.percentile(seismic_mag, [2, 98])
+        #remove_seis_outliers = ((seismic_mag >= seis_low) & (seismic_mag <= seis_high))
 
-        seis_trim = seismic_mag[remove_seis_outliers]
-        WS_interp = np.interp(np.arange(len(seis_trim)), np.linspace(0, len(seis_trim), len(WS)),WS)
+        #seis_trim = seismic_mag[remove_seis_outliers]
+        WS_interp = np.interp(np.arange(len(seismic_mag)), np.linspace(0, len(seismic_mag), len(WS)),WS)
 
-        
         plt.figure(figsize=(15,6)) 
         plt.title('Wind Speed vs Seismic Noise')
-        plt.ylim(0,0.5)
+        plt.ylim(0,0.1)
         plt.ylabel('Seismic Magnitude')
         plt.xlabel('Wind Speed Magnitude')
 
-        plt.scatter(WS_interp, seis_trim)
+        plt.scatter(WS_interp, seismic_mag)
 
 
 

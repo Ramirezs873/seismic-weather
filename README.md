@@ -34,3 +34,13 @@ AWS data is read as a .txt or .parquet file. read_data() searches for title: 'HM
 Seismic data is read as a dictionary of isolated components for each station. 
 * Following the workflow in seismic-sensor-analysis gives the seismic data in the correct format for compare_seismic_wind(). 
 
+---
+### Config File
+
+The `config.yml` file contains paths to local directories
+
+```
+name: Windy 
+aws_dir: ../data/AWS/
+seis_dir: ../data/seismic/
+```

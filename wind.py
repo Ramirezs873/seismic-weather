@@ -5,6 +5,7 @@ import numpy as np
 import plotly.express as px
 from obspy.signal.util import smooth
 from obspy import UTCDateTime as UTC
+from scipy.stats import linregress
 
 
 
@@ -781,7 +782,7 @@ def seismic_energy(seismic_data,
             plt.plot(times_dt, energies, label=station, alpha=0.8)
         plt.title("Seismic Energy Over Time")
         plt.xlabel("Time")
-        plt.ylabel(r"Energy (EW^2 + NS^2)")
+        plt.ylabel(r"Energy ($EW^{2} + NS^{2}$)")
         plt.legend()
         plt.tight_layout()
         plt.show()
@@ -806,7 +807,7 @@ def seismic_energy(seismic_data,
         # plot AWS
         ax1.plot(df_slice["datetime"], WS,
                 "k-", linewidth=0.8, label="Wind Speed")
-        ax1.set_ylabel("Wind Speed [km/hr]", color="k")
+        ax1.set_ylabel(r"Wind Speed ($km/hr$)", color="k")
         ax1.tick_params(axis="y", labelcolor="k")
         ax1.set_ylim(bottom=0)
 
@@ -817,7 +818,7 @@ def seismic_energy(seismic_data,
             ax2.plot(times_dt, energies, label=station, alpha=0.8)
         plt.title("Seismic Energy Over Time")
         plt.xlabel("Time")
-        plt.ylabel(r"Energy (EW^2 + NS^2)")
+        plt.ylabel(r"Energy ($EW^{2} + NS^{2}$)")
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
@@ -826,3 +827,100 @@ def seismic_energy(seismic_data,
 
 
     return times, energy    
+
+def wind_seis_energy_scatter(seismic_energy,
+                             wind_data,
+                             wind_thresh,
+                             wind_year = None,
+                             wind_month = None,
+                             wind_day = None,
+                             wind_hour = None):
+    
+    # Check if time inputs are single valued or a range.
+    # Year
+    if isinstance(wind_year, (tuple, list)) and len(wind_year) == 2: 
+        start_year, end_year = wind_year 
+        df_slice = wind_data[(wind_data['datetime'].dt.year >= start_year) & 
+                        (wind_data['datetime'].dt.year <= end_year) ].copy()
+    elif wind_year is None or wind_year < 2010 or wind_year > 2025:
+        df_slice = wind_data.copy()
+    else:
+        df_slice = wind_data[wind_data['datetime'].dt.year == wind_year].copy()
+    # Month
+    if isinstance(wind_month, (tuple, list)) and len(wind_month) == 2: 
+        start_month, end_month = wind_month 
+        df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                        (df_slice['datetime'].dt.month <= end_month) ].copy()
+    elif isinstance(wind_month, int): 
+        df_slice = df_slice[df_slice['datetime'].dt.month == wind_month].copy()
+    # Day
+    if isinstance(wind_day, (tuple, list)) and len(wind_day) == 2:
+        start_day, end_day = wind_day
+        df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
+                            (df_slice['datetime'].dt.day <= end_day)].copy()                    
+    elif isinstance(wind_day, int):
+        df_slice = df_slice[df_slice['datetime'].dt.day == wind_day].copy()
+    # Hour
+    if isinstance(wind_hour, (tuple, list)) and len(wind_hour) == 2:
+        start_hour, end_hour = wind_hour
+        df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                            (df_slice['datetime'].dt.hour <= end_hour)].copy()
+    elif isinstance(wind_hour, int):
+        df_slice = df_slice[df_slice['datetime'].dt.hour == wind_hour].copy()
+
+    # Check if there is any data.
+    if df_slice.empty: 
+        print("No wind data available for the selected time period.") 
+        return
+    
+     # Convert to numeric
+    df_slice['Wind speed in km/h'] = pd.to_numeric(df_slice['Wind speed in km/h'], 
+                                                    errors='coerce')
+    df_slice['Wind direction in degrees true'] = pd.to_numeric(df_slice['Wind direction in degrees true'],
+                                                            errors='coerce')
+    df_slice['Wind direction in degrees true'] %= 360
+
+    # Create variables
+    wind_speed = df_slice['Wind speed in km/h']
+    WS = abs(wind_speed)
+    
+    
+    seis_time = seismic_energy[0] 
+    seis_time = [t.datetime for t in seis_time]
+
+    energy = seismic_energy[1][list(seismic_energy[1].keys())[0]]
+
+    energy = pd.to_numeric(energy, errors="coerce")
+    energy_series = pd.Series(np.where(np.isfinite(energy), 
+                                       np.log(energy), 
+                                       np.nan),
+                              index=pd.to_datetime(seis_time))
+    
+    aws_series = df_slice.set_index("datetime")['Wind speed in km/h']
+    combined = pd.concat([aws_series, energy_series.rename("energy")], axis=1).dropna()
+    
+
+    mask = combined['Wind speed in km/h'].values > wind_thresh
+
+    x = combined['Wind speed in km/h'].values
+    y = combined["energy"].values
+
+    # linear regression 
+    slope, intercept, r, p, se = linregress(x[mask], y[mask])
+    x_fit = np.linspace(x[mask].min(), x[mask].max(), 200)
+    y_fit = slope * x_fit + intercept
+
+    r2 = r**2
+    p_str = f"{p:.2e}" if p < 0.001 else f"{p:.3f}"
+    fit_label = f"fit: y = {slope:.3f}x + {intercept:.2f}\nR² = {r2:.3f}, p = {p_str} for wind over {wind_thresh} (km/hr)."
+
+    plt.scatter(x, y, c="blue", s=10, alpha=0.5, linewidths=0, label=f"n = {len(x)}")
+    plt.plot(x_fit, y_fit, "k-", linewidth=1.5, label=fit_label)
+
+    plt.xlabel("Wind Speed")
+    plt.ylabel("Seismic Energy")
+    plt.title("Wind Speed vs Seismic Energy")
+    plt.legend()
+    plt.ylim(np.percentile(y, 2.5), np.percentile(y, 100 - 2.5))
+    plt.tight_layout()
+    

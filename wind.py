@@ -4,6 +4,8 @@ from matplotlib import pyplot as plt
 import numpy as np
 import plotly.express as px
 from obspy.signal.util import smooth
+from obspy import UTCDateTime as UTC
+
 
 
 def read_data(path, 
@@ -50,6 +52,63 @@ def read_data(path,
                                         minute=df["MI format in Universal coordinated time"]))
 
     return df
+
+def resample_aws(data, year, month, day, hour, freq="30min"):
+    """
+    Resample wind data to a regular datetime grid.
+    Missing timestamps become NaN rows automatically.
+    
+    Parameters:
+    data (pd.DataFrame):
+        The DataFrame containing the weather station data.
+    freq (str):
+        Time interval for resample.
+        e.g "30min"
+    """
+
+    # Check if time inputs are single valued or a range.
+    # Year
+    if isinstance(year, (tuple, list)) and len(year) == 2: 
+        start_year, end_year = year 
+        df_slice = data[(data['datetime'].dt.year >= start_year) & 
+                        (data['datetime'].dt.year <= end_year) ].copy()
+    elif year is None or year < 2010 or year > 2025:
+        df_slice = data.copy()
+    else:
+        df_slice = data[data['datetime'].dt.year == year].copy()
+    # Month
+    if isinstance(month, (tuple, list)) and len(month) == 2: 
+        start_month, end_month = month 
+        df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                        (df_slice['datetime'].dt.month <= end_month) ].copy()
+    elif isinstance(month, int): 
+        df_slice = df_slice[df_slice['datetime'].dt.month == month].copy()
+    # Day
+    if isinstance(day, (tuple, list)) and len(day) == 2:
+        start_day, end_day = day
+        df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
+                            (df_slice['datetime'].dt.day <= end_day)].copy()
+    elif isinstance(day, int):
+        df_slice = df_slice[df_slice['datetime'].dt.day == day].copy()
+    # Hour
+    if isinstance(hour, (tuple, list)) and len(hour) == 2:
+        start_hour, end_hour = hour
+        df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                            (df_slice['datetime'].dt.hour <= end_hour)].copy()
+    elif isinstance(hour, int):
+        df_slice = df_slice[df_slice['datetime'].dt.hour == hour].copy()
+    
+    # Check if there is data
+    if df_slice.empty: 
+        print("No data available for the selected time period.") 
+        return
+    
+    df_slice = df_slice.set_index("datetime")
+    df = df_slice.resample(freq).asfreq() 
+    df.index.name = "datetime"
+    
+
+    return df.reset_index()
 
 def plot_wind_speed(data, 
                     year=None, 
@@ -138,12 +197,18 @@ def plot_wind_speed(data,
         wind_speed = smooth(wind_speed.to_numpy(), smoothie)
     else:
         wind_speed = wind_speed.to_numpy()
+
+    # Clean Data
+    valid_mask = ~np.isnan(wind_speed)
+
+    wind_speed = wind_speed[valid_mask]
+    time = df_slice['datetime'].to_numpy()[valid_mask]
         
     # Create Figure 
     plt.figure(figsize=(15,6))
 
     # Plot
-    plt.plot(df_slice['datetime'], wind_speed, 
+    plt.plot(time, wind_speed, 
             color='black', linewidth=0.5)
     
     # Title construction
@@ -622,9 +687,60 @@ def wind_vs_noise(seismic_data,
         # Plot
         plt.scatter(WS_interp, H)
 
-
-
+def seismic_energy(seismic_data, wind_data, plot = True):
+    aws_times = pd.to_datetime(wind_data["datetime"]).sort_values().reset_index(drop=True)
+    aws_times = [UTC(ts) for ts in aws_times]
     
+    station_list = list(seismic_data.keys())
 
+    energy = {}
+
+    for station in station_list:
+        EW, NS, fs, t_start = seismic_data[station]
+        
+        energies = []
+
+        for i in range(1, len(aws_times)):
+
+            t0 = UTC(aws_times[i-1])
+            t1 = UTC(aws_times[i])
+
+            i0 = int((t0 - t_start) * fs)
+            i1 = int((t1 - t_start) * fs)
+
+            i0 = max(i0, 0)
+            i1 = min(i1, len(EW))
+
+            if i1 <= i0:
+                energies.append(np.nan)
+                continue
+
+            seg_EW = EW[i0:i1]
+            seg_NS = NS[i0:i1]
+
+            if np.any(~np.isfinite(seg_EW)) or np.any(~np.isfinite(seg_NS)):
+                energies.append(np.nan)
+                continue
+
+            energy_sum = np.sum(seg_EW**2 + seg_NS**2)
+
+            energies.append(energy_sum)
+
+        energy[station] = np.array(energies)
+
+    times = aws_times[1:]
+
+    if plot == True:
+        for station, energies in energy.items():
+            plt.plot(times, energies, label=station, alpha=0.8)
+        plt.title("Seismic Energy Over Time")
+        plt.xlabel("Time")
+        plt.ylabel(r"Energy (EW^2 + NS^2)")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+
+    return times, energy    
 
 

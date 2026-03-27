@@ -687,8 +687,53 @@ def wind_vs_noise(seismic_data,
         # Plot
         plt.scatter(WS_interp, H)
 
-def seismic_energy(seismic_data, wind_data, plot = True):
-    aws_times = pd.to_datetime(wind_data["datetime"]).sort_values().reset_index(drop=True)
+def seismic_energy(seismic_data, 
+                   wind_data, 
+                   wind_year=None,
+                   wind_month=None,
+                   wind_day=None,
+                   wind_hour=None,
+                   energy_plot = False,
+                   wind_vs_energy_plot = False):
+
+    # Check if time inputs are single valued or a range.
+    # Year
+    if isinstance(wind_year, (tuple, list)) and len(wind_year) == 2: 
+        start_year, end_year = wind_year 
+        df_slice = wind_data[(wind_data['datetime'].dt.year >= start_year) & 
+                        (wind_data['datetime'].dt.year <= end_year) ].copy()
+    elif wind_year is None or wind_year < 2010 or wind_year > 2025:
+        df_slice = wind_data.copy()
+    else:
+        df_slice = wind_data[wind_data['datetime'].dt.year == wind_year].copy()
+    # Month
+    if isinstance(wind_month, (tuple, list)) and len(wind_month) == 2: 
+        start_month, end_month = wind_month 
+        df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                        (df_slice['datetime'].dt.month <= end_month) ].copy()
+    elif isinstance(wind_month, int): 
+        df_slice = df_slice[df_slice['datetime'].dt.month == wind_month].copy()
+    # Day
+    if isinstance(wind_day, (tuple, list)) and len(wind_day) == 2:
+        start_day, end_day = wind_day
+        df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
+                            (df_slice['datetime'].dt.day <= end_day)].copy()                    
+    elif isinstance(wind_day, int):
+        df_slice = df_slice[df_slice['datetime'].dt.day == wind_day].copy()
+    # Hour
+    if isinstance(wind_hour, (tuple, list)) and len(wind_hour) == 2:
+        start_hour, end_hour = wind_hour
+        df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                            (df_slice['datetime'].dt.hour <= end_hour)].copy()
+    elif isinstance(wind_hour, int):
+        df_slice = df_slice[df_slice['datetime'].dt.hour == wind_hour].copy()
+
+    # Check if there is any data.
+    if df_slice.empty: 
+        print("No wind data available for the selected time period.") 
+        return
+    
+    aws_times = pd.to_datetime(df_slice["datetime"]).sort_values().reset_index(drop=True)
     aws_times = [UTC(ts) for ts in aws_times]
     
     station_list = list(seismic_data.keys())
@@ -729,18 +774,55 @@ def seismic_energy(seismic_data, wind_data, plot = True):
         energy[station] = np.array(energies)
 
     times = aws_times[1:]
+    times_dt = [t.datetime for t in times]
 
-    if plot == True:
+    if energy_plot == True:
         for station, energies in energy.items():
-            plt.plot(times, energies, label=station, alpha=0.8)
+            plt.plot(times_dt, energies, label=station, alpha=0.8)
         plt.title("Seismic Energy Over Time")
         plt.xlabel("Time")
         plt.ylabel(r"Energy (EW^2 + NS^2)")
         plt.legend()
         plt.tight_layout()
         plt.show()
+    
+    if wind_vs_energy_plot == True:
+            
+        # Convert to numeric
+        df_slice['Wind speed in km/h'] = pd.to_numeric(df_slice['Wind speed in km/h'], 
+                                                        errors='coerce')
+        df_slice['Wind direction in degrees true'] = pd.to_numeric(df_slice['Wind direction in degrees true'],
+                                                                errors='coerce')
+        df_slice['Wind direction in degrees true'] %= 360
+
+        # Create variables
+        wind_speed = df_slice['Wind speed in km/h']
+        WS = abs(wind_speed)
+        
+        # Plot
+        fig, ax1 = plt.subplots(figsize=(12,6))
+
+
+        # plot AWS
+        ax1.plot(df_slice["datetime"], WS,
+                "k-", linewidth=0.8, label="Wind Speed")
+        ax1.set_ylabel("Wind Speed [km/hr]", color="k")
+        ax1.tick_params(axis="y", labelcolor="k")
+        ax1.set_ylim(bottom=0)
+
+        # Plot Seismic
+
+        ax2 = ax1.twinx()
+        for station, energies in energy.items():
+            ax2.plot(times_dt, energies, label=station, alpha=0.8)
+        plt.title("Seismic Energy Over Time")
+        plt.xlabel("Time")
+        plt.ylabel(r"Energy (EW^2 + NS^2)")
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
+        plt.tight_layout()
+        plt.show()
 
 
     return times, energy    
-
-

@@ -111,13 +111,14 @@ def resample_aws(data, year, month, day, hour, freq="30min"):
 
     return df.reset_index()
 
-def plot_wind_speed(data, 
-                    year=None, 
-                    month=None, 
-                    day=None,
-                    hour=None,
-                    apply_smooth = True,
-                    smoothie = 3):
+def wind_speed(data, 
+                year=None, 
+                month=None, 
+                day=None,
+                hour=None,
+                plot = True,
+                apply_smooth = False,
+                smoothie = 3):
 
     """
     Plots the wind speed for a given year and month from the provided DataFrame.
@@ -204,48 +205,52 @@ def plot_wind_speed(data,
 
     wind_speed = wind_speed[valid_mask]
     time = df_slice['datetime'].to_numpy()[valid_mask]
+
+    if plot == True:
         
-    # Create Figure 
-    plt.figure(figsize=(15,6))
+        # Create Figure 
+        plt.figure(figsize=(15,6))
 
-    # Plot
-    plt.plot(time, wind_speed, 
-            color='black', linewidth=0.5)
-    
-    # Title construction
-    title = f"Wind Speed at Station {df_slice['Station Number'].iloc[0]} for "
-    # Year
-    if isinstance(year, (tuple, list)):
-        title += f"{year[0]} to {year[1]}"
-    elif year is None:
-        title += "All Years"
-    else:
-        title += f"{year}"
-    # Month
-    if isinstance(month, (tuple, list)):
-        title += f", Months:{month[0]} to {month[1]}"
-    elif isinstance(month, int):
-        title += f", Month:{month}"
-    # Day
-    if isinstance(day, (tuple, list)):
-        title += f", Days:{day[0]} to {day[1]}"
-    elif isinstance(day, int):
-        title += f", Day:{day}"
-    # Hour
-    if isinstance(hour, (tuple, list)):
-        title += f", Hours:{hour[0]} to {hour[1]}"
-    elif isinstance(hour, int):
-        title += f", Hour:{hour}"
-    plt.title(title)
+        # Plot
+        plt.plot(time, wind_speed, 
+                color='black', linewidth=0.5)
+        
+        # Title construction
+        title = f"Wind Speed at Station {df_slice['Station Number'].iloc[0]} for "
+        # Year
+        if isinstance(year, (tuple, list)):
+            title += f"{year[0]} to {year[1]}"
+        elif year is None:
+            title += "All Years"
+        else:
+            title += f"{year}"
+        # Month
+        if isinstance(month, (tuple, list)):
+            title += f", Months:{month[0]} to {month[1]}"
+        elif isinstance(month, int):
+            title += f", Month:{month}"
+        # Day
+        if isinstance(day, (tuple, list)):
+            title += f", Days:{day[0]} to {day[1]}"
+        elif isinstance(day, int):
+            title += f", Day:{day}"
+        # Hour
+        if isinstance(hour, (tuple, list)):
+            title += f", Hours:{hour[0]} to {hour[1]}"
+        elif isinstance(hour, int):
+            title += f", Hour:{hour}"
+        plt.title(title)
 
-    # Plot Formating
-    plt.ylabel('Wind Speed (km/h)')
-    plt.xlabel('Time')
-    ymax = np.max(wind_speed) # For y axis limit
-    plt.ylim(0, ymax + 10)
-    plt.grid(alpha=0.3)
-    plt.tight_layout()
-    plt.show()
+        # Plot Formating
+        plt.ylabel('Wind Speed (km/h)')
+        plt.xlabel('Time')
+        ymax = np.max(wind_speed) # For y axis limit
+        plt.ylim(0, ymax + 10)
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+
+    return time, wind_speed
 
 def plot_rose_wind(data, 
                    year=None, 

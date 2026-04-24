@@ -6,8 +6,11 @@ import plotly.express as px
 from obspy.signal.util import smooth
 from obspy import UTCDateTime as UTC
 from scipy.stats import linregress
-
-
+import random
+from sklearn.linear_model import LinearRegression
+from obspy import Trace
+from obspy import Stream
+from collections import defaultdict
 
 def read_data(path, 
               station_code, 
@@ -929,3 +932,455 @@ def wind_seis_energy_scatter(seismic_energy,
     plt.ylim(np.percentile(y, 2.5), np.percentile(y, 100 - 2.5))
     plt.tight_layout()
     
+def apply_filter(wave_dict, 
+                 filter_type, 
+                 freqmin=None, 
+                 freqmax=None, 
+                 freq=None, 
+                 corners=4, 
+                 zerophase=True):
+    
+    """
+    Apply a filter to seismic waveform data stored in a dictionary without altering the original.
+    Copied from align.py
+
+    Parameters:
+    wave_dict (dict):
+        Dictionary containing seismic waveform data.
+    filter_type (str):
+        Type of filter to apply. 
+        Options include 'bandpass', 'bandstop', 'lowpass', 'highpass'.
+        'lowpass_cheby_2', 'lowpass_fir', 'remez_fir' currently unsupported.
+    freqmin (float):
+        Minimum frequency for bandpass/bandstop filters.
+    freqmax (float):
+        Maximum frequency for bandpass/bandstop filters.
+    freq (float):
+        Cutoff frequency for lowpass/highpass filters.
+    corners (int):
+        Number of corners for the filter.
+    zerophase (bool):
+        True/False. If True, apply a zero-phase filter.
+
+    Returns:
+    filtered_dict (dict):
+        Dictionary containing filtered seismic waveform data.
+    """
+
+    # Setup dictionary
+    filtered_dict = {}
+
+    # Loop through and apply filter to the traces
+    for station_name, traces in wave_dict.items():
+        st = Stream([tr.copy() for tr in traces]) # Copy to avoid overwriting data
+
+        if filter_type in ('bandpass', 'bandstop'):
+            st.filter(type=filter_type, 
+                      freqmin=freqmin, 
+                      freqmax=freqmax, 
+                      corners=corners, 
+                      zerophase=zerophase)
+            
+        elif filter_type in ('lowpass', 'highpass'): 
+            st.filter(type=filter_type, 
+                      freq=freq, 
+                      corners=corners, 
+                      zerophase=zerophase)
+            
+        else:
+            raise ValueError(f"Unsupported filter type: {filter_type}") #'lowpass_cheby_2', 'lowpass_fir', 'remez_fir' currently not setup
+
+        filtered_dict[station_name] = st.traces # Write to a dictionary
+        
+    return filtered_dict
+
+def select_time(wave_dict, 
+                t_start, 
+                duration):
+    
+    ## Copied from align.py
+    
+    """
+    Select a specific time window from seismic waveform data stored in a dictionary without altering the original.
+
+    Parameters:
+    wave_dict (dict):
+        Dictionary containing seismic waveform data.
+    t_start (UTCDateTime):
+        Start time for the time window.
+    duration (float):
+        Duration of the time window in seconds.
+    
+    Returns:
+    new_dict (dict):
+        Dictionary containing selected seismic waveform data.
+    """
+
+    # Establish timespan
+    t_end = t_start + duration
+
+    # Trim to desired timespan and write to a direction
+    new_dict = defaultdict(list)
+    for station_name in wave_dict:
+        st = Stream(wave_dict[station_name]).copy() # Copy to avoid overwriting data
+        st.trim(starttime=t_start, endtime=t_end, pad=False)
+
+        new_dict[station_name].extend(st.traces)
+
+    return new_dict
+
+def signal_to_noise(wave_dict, 
+                    filtered_dict):
+    """
+    Calculates the noise to signal ratio for the 
+    Z, NS and EW components of seismic data and 
+    stores the results as a dictionary.
+    Copied from process.py.
+
+    Parameters:
+    wave_dict (dict):
+        A wave dictionary containing seismic waveform data.
+    filtered_dict (dict):
+        A dictionary containing filtered seismic waveform data.
+    Z_channel (list of str):
+        List of channel codes for the Z component.
+    NS_channel (list of str):
+        List of channel codes for the NS component.
+    EW_channel (list of str):
+        List of channel codes for the EW component.
+    """
+    
+    # Set up seismic waveform data from wave_dict and the filtered data from filtered_dict 
+    # and calculate the noise to signal ratio.
+    # Setup Storage
+    ratio_dict = {}
+    # Loop through wave_dict, find the channels, and store the data in a new dictionary
+    for station, (EW, NS, Z, fs, t_start) in wave_dict.items():
+        #print(f"Processing {station}...")
+        # Seismic Waveform Data
+        # Warnings for missing channels.
+        if Z is None:
+            print(f"Warning: Missing Z channel for {station}. Skipping."
+                    "This may cause issues if the Z channel is not missing in wave_dict.")
+        if NS is None:
+            print(f"Warning: Missing NS channel for {station}. Skipping."
+                    "This may cause issues if the NS channel is not missing in wave_dict.")
+        if EW is None:
+            print(f"Warning: Missing EW channel for {station}. Skipping."
+                    "This may cause issues if the EW channel is not missing in wave_dict.")
+
+        # Filtered Waveform Data
+        for i, (EW_filt, NS_filt, Z_filt, fs_filt, t_start_filt) in filtered_dict.items():
+                # Warnings for missing channels.
+            if Z_filt is None:
+                print(f"Warning: Missing Z channel for filtered {station}. Skipping."
+                        "This may cause issues if the Z channel is not missing in filtered_dict.")
+            if NS_filt is None:
+                print(f"Warning: Missing NS channel for filtered {station}. Skipping."
+                        "This may cause issues if the NS channel is not missing in filtered_dict.")
+            if EW_filt is None:
+                print(f"Warning: Missing EW channel for filtered {station}. Skipping."
+                        "This may cause issues if the EW channel is not missing in filtered_dict.")
+
+            # Calculate noise to signal ratio for each station and component, and store in a new dictionary.
+            if Z is not None and Z_filt is not None:
+                noise_Z = Z - Z_filt
+                signal_P_Z = np.mean(Z_filt ** 2)
+                noise_P_Z = np.mean(noise_Z ** 2)
+                ratio_Z = 10 * np.log10(signal_P_Z / noise_P_Z)
+            else:
+                ratio_Z = None
+                print(f"No Data for Z component in {station}. Skipping.")
+            # NS component
+            if NS is not None and NS_filt is not None:
+                noise_NS = NS - NS_filt
+                signal_P_NS = np.mean(NS_filt ** 2)
+                noise_P_NS = np.mean(noise_NS ** 2)
+                ratio_NS = 10 * np.log10(signal_P_NS / noise_P_NS)
+            else:
+                ratio_NS = None
+                print(f"No Data for NS component in {station}. Skipping.")
+            # EW component
+            if EW is not None and EW_filt is not None:
+                noise_EW = EW - EW_filt
+                signal_P_EW = np.mean(EW_filt ** 2)
+                noise_P_EW = np.mean(noise_EW ** 2)
+                ratio_EW = 10 * np.log10(signal_P_EW / noise_P_EW)
+            else:
+                ratio_EW = None
+                print(f"No Data for EW component in {station}. Skipping.")
+            # Store the ratios in a new dictionary
+            ratio_dict[station] = {"Z": float(ratio_Z) if ratio_Z is not None else None,
+                                "NS": float(ratio_NS) if ratio_NS is not None else None,
+                                "EW": float(ratio_EW) if ratio_EW is not None else None}
+
+    return ratio_dict
+
+def montecarlo_optimal_snr(wind_speed,
+                           wave_dict,
+                           freq_range,
+                           n_iterations,
+                           t_0,
+                           n_days):
+    
+    # Store results
+    results = []
+    station_list = list(wave_dict.keys())
+
+    for station in station_list:
+        print(f"Processing {station}...")
+        station_results = []
+        for i in range(n_iterations):
+            # Randomly select frequency range
+            fmin = random.randint(freq_range[0], freq_range[1] - 1)
+            fmax = random.randint(fmin + 1, freq_range[1])
+            
+            # Apply bandpass filter
+            CWA_test = apply_filter({station: wave_dict[station]}, 'bandpass', freqmin=fmin, freqmax=fmax)
+            
+            # Calculate SNR for each 30-min window
+            
+            snr_test = []
+            t_test = t_0
+
+            for j in range(0, 48*n_days):
+                trim_test = select_time(CWA_test, t_test, 1800)
+                trim_wave_dict = select_time({station: wave_dict[station]}, t_test, 1800)
+                wave_dict_rotate = rotate_stream(trim_wave_dict, ['BH1', 'HHN'], ['BH2', 'HHE'], ['BHZ', 'HHZ'], [0])
+                filter_rotate = rotate_stream(trim_test, ['BH1', 'HHN'], ['BH2', 'HHE'], ['BHZ', 'HHZ'], [0])
+                snr_test.append(signal_to_noise((wave_dict_rotate[0]), filter_rotate[0]))
+                t_test += 1800
+            
+            # Extract Z, NS, EW components
+            Z_test = [snr_test[k][station]['Z'] for k in range(len(snr_test))]
+            NS_test = [snr_test[k][station]['NS'] for k in range(len(snr_test))]
+            EW_test = [snr_test[k][station]['EW'] for k in range(len(snr_test))]
+            
+            # Trim to match wind speed data length
+            n = min(len(wind_speed), len(Z_test))
+            Z_test_n = Z_test[:n]
+            NS_test_n = NS_test[:n]
+            EW_test_n = EW_test[:n]
+            
+            # Calculate R² for each component
+            windarray = np.array(wind_speed.reshape(-1, 1))
+            
+            Z_model = LinearRegression().fit(windarray, Z_test_n)
+            Z_r_sq = Z_model.score(windarray, Z_test_n)
+            
+            NS_model = LinearRegression().fit(windarray, NS_test_n)
+            NS_r_sq = NS_model.score(windarray, NS_test_n)
+            
+            EW_model = LinearRegression().fit(windarray, EW_test_n)
+            EW_r_sq = EW_model.score(windarray, EW_test_n)
+            
+            # Store results
+            station_results.append({
+                'fmin': fmin,
+                'fmax': fmax,
+                'Z_r2': Z_r_sq,
+                'NS_r2': NS_r_sq,
+                'EW_r2': EW_r_sq,
+                'avg_r2': (Z_r_sq + NS_r_sq + EW_r_sq) / 3,
+                'Z': Z_test_n,
+                'NS': NS_test_n,
+                'EW': EW_test_n,
+                'Z_model': Z_model,
+                'NS_model': NS_model,
+                'EW_model': EW_model,
+                'windarray': windarray
+            })
+        
+            print(f"Completed {i+1}/{n_iterations} iterations")
+
+        # Find best result
+        best_result = max(station_results, key=lambda x: x['avg_r2'])
+        print(f"\nBest frequency range for {station}: {best_result['fmin']} - {best_result['fmax']} Hz")
+        print(f"Z R²: {best_result['Z_r2']:.4f}")
+        print(f"NS R²: {best_result['NS_r2']:.4f}")
+        print(f"EW R²: {best_result['EW_r2']:.4f}")
+        print(f"Average R²: {best_result['avg_r2']:.4f}")
+        results.append(station_results)
+
+    return results
+
+def find_channel(stream, options):
+    """
+    Find appropriate NS and EW Channels from a chosen stream.
+    Copied from align.py.
+    
+    Parameters:
+    stream (obspy.core.stream.Stream):
+        An ObsPy stream object.
+    options (list of str):
+        A list of channel codes.
+    """
+    # Loop through streams and find the associated channel code
+    traces = []
+    for ch in options:
+        traces.extend(stream.select(channel=ch))
+        if len(traces) > 0:
+            return traces # Return first channel code
+        
+    # If none are found
+    return None 
+
+def rotate_stream(wave_dict, 
+                  NS_channel, 
+                  EW_channel, 
+                  Z_channel,
+                  misalignment_angle,
+                  plot = False):
+    
+    ## Copied from align.py
+    
+    station_list = list(wave_dict.keys())
+    aligned_wave_dict = {}
+    aligned_obspy = defaultdict(list)
+
+    for (station, stream, angle) in zip(station_list, wave_dict.values(), misalignment_angle):
+        #print(f"Processing {station}...")
+        st = Stream(stream)
+        st.sort(['channel'])
+        NS = find_channel(st, NS_channel) 
+        EW = find_channel(st, EW_channel) 
+        Z = find_channel(st, Z_channel)
+
+        t_start = min(tr.stats.starttime for tr in st)
+        t_end   = max(tr.stats.endtime for tr in st)
+        fs = st[0].stats.sampling_rate
+        npts = int(round((t_end - t_start) * fs))
+
+        # Make each channel a continuous data set by filling in the gaps with NaNs. 
+        # This ensures that the cross correlation and rotation are applied to the entire signal, even if there are gaps in the data.
+        E = np.full(npts, np.nan)
+        N = np.full(npts, np.nan)
+        Z_2 = np.full(npts, np.nan)
+
+        for tr in EW:
+            i0 = int(round((tr.stats.starttime - t_start) * fs))
+            i1 = i0 + len(tr.data)
+            if i1 > npts:
+                i1 = npts
+                data = tr.data[:(i1 - i0)]
+            else:
+                data = tr.data
+
+            E[i0:i1] = data
+
+        for tr in NS:
+            i0 = int(round((tr.stats.starttime - t_start) * fs))
+            i1 = i0 + len(tr.data)
+            if i1 > npts:
+                i1 = npts
+                data = tr.data[:(i1 - i0)]
+            else:
+                data = tr.data
+
+            N[i0:i1] = data
+
+        for tr in Z:
+            i0 = int(round((tr.stats.starttime - t_start) * fs))
+            i1 = i0 + len(tr.data)
+            if i1 > npts:
+                i1 = npts
+                data = tr.data[:(i1 - i0)]
+            else:
+                data = tr.data
+
+            Z_2[i0:i1] = data
+
+        n = min(len(N), len(E), len(Z_2)) 
+        y = N[:n] 
+        x = E[:n] 
+        z = Z_2[:n]
+
+
+        scale = np.nanmax(np.sqrt((x**2)+(y**2)))
+        
+        x = x / scale
+        y = y / scale
+
+        S_k = x + 1j*y
+        S_k_aligned = S_k *np.exp(-1j * np.deg2rad(angle))
+
+        x = np.real(S_k_aligned)
+        y = np.imag(S_k_aligned)
+        
+        #times = NS.times("timestamp")[:n]        
+        aligned_wave_dict[station] =  x, y, z, fs, t_start
+
+        # Create new obspy stream with aligned data
+        st = Stream()
+        NS_name = NS[0].stats.channel if NS else None
+        EW_name = EW[0].stats.channel if EW else None
+        Z_name  = Z[0].stats.channel if Z else None
+        components = {EW_name: x, NS_name: y, Z_name: z}
+        if NS_name is None or EW_name is None or Z_name is None:
+            print(f"Skipping {station}. Missing channel")
+            continue
+
+        for channel, data in components.items():
+            network_name, station_name, *_ = station.split('.')
+            tr = Trace(data=data)
+            tr.stats.network = network_name
+            tr.stats.station = station_name
+            tr.stats.channel = channel
+            tr.stats.starttime = UTC(t_start)
+            tr.stats.sampling_rate = fs
+            st.append(tr)
+
+        aligned_obspy[station] = st
+
+        # Gather polar coordinates
+        theta_aligned = np.arctan2(y, x)
+        r_aligned = np.sqrt(x**2 + y**2)
+        
+
+        if plot == True:
+            # Create polar plot
+            fig = plt.figure(figsize=(6, 6))
+
+            ax = fig.add_subplot(1, 1, 1, projection="polar")
+            
+            ax.set_rlabel_position(5)
+
+            ax.plot(theta_aligned, 
+                    r_aligned, 
+                    alpha=0.65, 
+                    color = 'darkmagenta',
+                    label="Corrected Target Station")
+                
+            # Legend
+            ax.legend(
+            loc="upper right",
+            bbox_to_anchor=(1.3, 1.1),
+            fontsize=8,
+            frameon=True)
+
+            # Add cardinal direction annotations
+            ax.set_rmax(1.2)
+            cardinals = {
+                "E": (0, 1.05 * 1.05),
+                "N": (np.pi / 2, 1.05),
+                "W": (np.pi, 1.05 * 1.05),
+                "S": (3 * np.pi / 2, 1.05)}
+
+            offset = 0.385  # Offset for cardinal labels
+
+            for label, (angle, radius) in cardinals.items():
+                ax.text(
+                    angle,
+                    radius + offset,
+                    label,
+                    ha="center",
+                    va="center",
+                    fontsize=12,
+                    fontweight="bold",
+                    clip_on=False)
+
+            plt.tight_layout()
+
+            plt.show()
+
+    return aligned_wave_dict, aligned_obspy

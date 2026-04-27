@@ -1146,9 +1146,7 @@ def montecarlo_optimal_snr(wind_speed,
             for j in range(0, 48*n_days):
                 trim_test = select_time(CWA_test, t_test, 1800)
                 trim_wave_dict = select_time({station: wave_dict[station]}, t_test, 1800)
-                wave_dict_rotate = rotate_stream(trim_wave_dict, ['BH1', 'HHN'], ['BH2', 'HHE'], ['BHZ', 'HHZ'], [0])
-                filter_rotate = rotate_stream(trim_test, ['BH1', 'HHN'], ['BH2', 'HHE'], ['BHZ', 'HHZ'], [0])
-                snr_test.append(signal_to_noise((wave_dict_rotate[0]), filter_rotate[0]))
+                snr_test.append(signal_to_noise((trim_wave_dict[0]), trim_test[0]))
                 t_test += 1800
             
             # Extract Z, NS, EW components
@@ -1225,162 +1223,102 @@ def find_channel(stream, options):
     # If none are found
     return None 
 
-def rotate_stream(wave_dict, 
-                  NS_channel, 
-                  EW_channel, 
-                  Z_channel,
-                  misalignment_angle,
-                  plot = False):
+def signal_to_noise(wave_dict, 
+                    filtered_dict,
+                    NS_channel,
+                    EW_channel,
+                    Z_channel):
+    """
+    Calculates the noise to signal ratio for the 
+    Z, NS and EW components of seismic data and 
+    stores the results as a dictionary.
+    Parameters:
+    wave_dict (dict):
+        A wave dictionary containing seismic waveform data.
+    filtered_dict (dict):
+        A dictionary containing filtered seismic waveform data.
+    Z_channel (list of str):
+        List of channel codes for the Z component.
+    NS_channel (list of str):
+        List of channel codes for the NS component.
+    EW_channel (list of str):
+        List of channel codes for the EW component.
+    """
     
-    ## Copied from align.py
-    
-    station_list = list(wave_dict.keys())
-    aligned_wave_dict = {}
-    aligned_obspy = defaultdict(list)
-
-    for (station, stream, angle) in zip(station_list, wave_dict.values(), misalignment_angle):
-        #print(f"Processing {station}...")
+    # Set up seismic waveform data from wave_dict and the filtered data from filtered_dict 
+    # and calculate the noise to signal ratio.
+    # Setup Storage
+    ratio_dict = {}
+    # Loop through wave_dict, find the channels, and store the data in a new dictionary
+    for i, (station, stream) in enumerate(wave_dict.items(), start=2):
+        print(f"Processing {station}...")
         st = Stream(stream)
         st.sort(['channel'])
-        NS = find_channel(st, NS_channel) 
-        EW = find_channel(st, EW_channel) 
-        Z = find_channel(st, Z_channel)
+        NS = np.array(find_channel(st, NS_channel)) # Try to find NS channel from function input
+        EW = np.array(find_channel(st, EW_channel)) # Try to find EW channel from function input
+        Z = np.array(find_channel(st, Z_channel))
 
-        t_start = min(tr.stats.starttime for tr in st)
-        t_end   = max(tr.stats.endtime for tr in st)
-        fs = st[0].stats.sampling_rate
-        npts = int(round((t_end - t_start) * fs))
+        # Warnings for missing channels.
+        if Z is None:
+            print(f"Warning: Missing Z channel for {station}. Skipping."
+                    "This may cause issues if the Z channel is not missing in wave_dict.")
+        if NS is None:
+            print(f"Warning: Missing NS channel for {station}. Skipping."
+                    "This may cause issues if the NS channel is not missing in wave_dict.")
+        if EW is None:
+            print(f"Warning: Missing EW channel for {station}. Skipping."
+                    "This may cause issues if the EW channel is not missing in wave_dict.")
 
-        # Make each channel a continuous data set by filling in the gaps with NaNs. 
-        # This ensures that the cross correlation and rotation are applied to the entire signal, even if there are gaps in the data.
-        E = np.full(npts, np.nan)
-        N = np.full(npts, np.nan)
-        Z_2 = np.full(npts, np.nan)
+        # Filtered Waveform Data
+        for i, (station, stream) in enumerate(filtered_dict.items(), start=2):
+            st = Stream(stream)
+            st.sort(['channel'])
+            NS_filt = np.array(find_channel(st, NS_channel)) # Try to find NS channel from function input
+            EW_filt = np.array(find_channel(st, EW_channel)) # Try to find EW channel from function input
+            Z_filt = np.array(find_channel(st, Z_channel))
 
-        for tr in EW:
-            i0 = int(round((tr.stats.starttime - t_start) * fs))
-            i1 = i0 + len(tr.data)
-            if i1 > npts:
-                i1 = npts
-                data = tr.data[:(i1 - i0)]
+                # Warnings for missing channels.
+            if Z_filt is None:
+                print(f"Warning: Missing Z channel for filtered {station}. Skipping."
+                        "This may cause issues if the Z channel is not missing in filtered_dict.")
+            if NS_filt is None:
+                print(f"Warning: Missing NS channel for filtered {station}. Skipping."
+                        "This may cause issues if the NS channel is not missing in filtered_dict.")
+            if EW_filt is None:
+                print(f"Warning: Missing EW channel for filtered {station}. Skipping."
+                        "This may cause issues if the EW channel is not missing in filtered_dict.")
+
+
+            # Calculate noise to signal ratio for each station and component, and store in a new dictionary.
+            if Z is not None and Z_filt is not None:
+                noise_Z = Z - Z_filt
+                signal_P_Z = np.mean(Z_filt ** 2)
+                noise_P_Z = np.mean(noise_Z ** 2)
+                ratio_Z = 10 * np.log10(signal_P_Z / noise_P_Z)
             else:
-                data = tr.data
-
-            E[i0:i1] = data
-
-        for tr in NS:
-            i0 = int(round((tr.stats.starttime - t_start) * fs))
-            i1 = i0 + len(tr.data)
-            if i1 > npts:
-                i1 = npts
-                data = tr.data[:(i1 - i0)]
+                ratio_Z = None
+                print(f"No Data for Z component in {station}. Skipping.")
+            # NS component
+            if NS is not None and NS_filt is not None:
+                noise_NS = NS - NS_filt
+                signal_P_NS = np.mean(NS_filt ** 2)
+                noise_P_NS = np.mean(noise_NS ** 2)
+                ratio_NS = 10 * np.log10(signal_P_NS / noise_P_NS)
             else:
-                data = tr.data
-
-            N[i0:i1] = data
-
-        for tr in Z:
-            i0 = int(round((tr.stats.starttime - t_start) * fs))
-            i1 = i0 + len(tr.data)
-            if i1 > npts:
-                i1 = npts
-                data = tr.data[:(i1 - i0)]
+                ratio_NS = None
+                print(f"No Data for NS component in {station}. Skipping.")
+            # EW component
+            if EW is not None and EW_filt is not None:
+                noise_EW = EW - EW_filt
+                signal_P_EW = np.mean(EW_filt ** 2)
+                noise_P_EW = np.mean(noise_EW ** 2)
+                ratio_EW = 10 * np.log10(signal_P_EW / noise_P_EW)
             else:
-                data = tr.data
+                ratio_EW = None
+                print(f"No Data for EW component in {station}. Skipping.")
+            # Store the ratios in a new dictionary
+            ratio_dict[station] = {"Z": float(ratio_Z) if ratio_Z is not None else None,
+                                "NS": float(ratio_NS) if ratio_NS is not None else None,
+                                "EW": float(ratio_EW) if ratio_EW is not None else None}
 
-            Z_2[i0:i1] = data
-
-        n = min(len(N), len(E), len(Z_2)) 
-        y = N[:n] 
-        x = E[:n] 
-        z = Z_2[:n]
-
-
-        scale = np.nanmax(np.sqrt((x**2)+(y**2)))
-        
-        x = x / scale
-        y = y / scale
-
-        S_k = x + 1j*y
-        S_k_aligned = S_k *np.exp(-1j * np.deg2rad(angle))
-
-        x = np.real(S_k_aligned)
-        y = np.imag(S_k_aligned)
-        
-        #times = NS.times("timestamp")[:n]        
-        aligned_wave_dict[station] =  x, y, z, fs, t_start
-
-        # Create new obspy stream with aligned data
-        st = Stream()
-        NS_name = NS[0].stats.channel if NS else None
-        EW_name = EW[0].stats.channel if EW else None
-        Z_name  = Z[0].stats.channel if Z else None
-        components = {EW_name: x, NS_name: y, Z_name: z}
-        if NS_name is None or EW_name is None or Z_name is None:
-            print(f"Skipping {station}. Missing channel")
-            continue
-
-        for channel, data in components.items():
-            network_name, station_name, *_ = station.split('.')
-            tr = Trace(data=data)
-            tr.stats.network = network_name
-            tr.stats.station = station_name
-            tr.stats.channel = channel
-            tr.stats.starttime = UTC(t_start)
-            tr.stats.sampling_rate = fs
-            st.append(tr)
-
-        aligned_obspy[station] = st
-
-        # Gather polar coordinates
-        theta_aligned = np.arctan2(y, x)
-        r_aligned = np.sqrt(x**2 + y**2)
-        
-
-        if plot == True:
-            # Create polar plot
-            fig = plt.figure(figsize=(6, 6))
-
-            ax = fig.add_subplot(1, 1, 1, projection="polar")
-            
-            ax.set_rlabel_position(5)
-
-            ax.plot(theta_aligned, 
-                    r_aligned, 
-                    alpha=0.65, 
-                    color = 'darkmagenta',
-                    label="Corrected Target Station")
-                
-            # Legend
-            ax.legend(
-            loc="upper right",
-            bbox_to_anchor=(1.3, 1.1),
-            fontsize=8,
-            frameon=True)
-
-            # Add cardinal direction annotations
-            ax.set_rmax(1.2)
-            cardinals = {
-                "E": (0, 1.05 * 1.05),
-                "N": (np.pi / 2, 1.05),
-                "W": (np.pi, 1.05 * 1.05),
-                "S": (3 * np.pi / 2, 1.05)}
-
-            offset = 0.385  # Offset for cardinal labels
-
-            for label, (angle, radius) in cardinals.items():
-                ax.text(
-                    angle,
-                    radius + offset,
-                    label,
-                    ha="center",
-                    va="center",
-                    fontsize=12,
-                    fontweight="bold",
-                    clip_on=False)
-
-            plt.tight_layout()
-
-            plt.show()
-
-    return aligned_wave_dict, aligned_obspy
+    return ratio_dict

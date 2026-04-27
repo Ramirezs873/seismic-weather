@@ -1030,13 +1030,14 @@ def select_time(wave_dict,
     return new_dict
 
 def signal_to_noise(wave_dict, 
-                    filtered_dict):
+                    filtered_dict,
+                    NS_channel,
+                    EW_channel,
+                    Z_channel):
     """
     Calculates the noise to signal ratio for the 
     Z, NS and EW components of seismic data and 
     stores the results as a dictionary.
-    Copied from process.py.
-
     Parameters:
     wave_dict (dict):
         A wave dictionary containing seismic waveform data.
@@ -1055,9 +1056,14 @@ def signal_to_noise(wave_dict,
     # Setup Storage
     ratio_dict = {}
     # Loop through wave_dict, find the channels, and store the data in a new dictionary
-    for station, (EW, NS, Z, fs, t_start) in wave_dict.items():
-        #print(f"Processing {station}...")
-        # Seismic Waveform Data
+    for i, (station, stream) in enumerate(wave_dict.items(), start=2):
+        print(f"Processing {station}...")
+        st = Stream(stream)
+        st.sort(['channel'])
+        NS = np.array(find_channel(st, NS_channel)) # Try to find NS channel from function input
+        EW = np.array(find_channel(st, EW_channel)) # Try to find EW channel from function input
+        Z = np.array(find_channel(st, Z_channel))
+
         # Warnings for missing channels.
         if Z is None:
             print(f"Warning: Missing Z channel for {station}. Skipping."
@@ -1070,7 +1076,13 @@ def signal_to_noise(wave_dict,
                     "This may cause issues if the EW channel is not missing in wave_dict.")
 
         # Filtered Waveform Data
-        for i, (EW_filt, NS_filt, Z_filt, fs_filt, t_start_filt) in filtered_dict.items():
+        for i, (station, stream) in enumerate(filtered_dict.items(), start=2):
+            st = Stream(stream)
+            st.sort(['channel'])
+            NS_filt = np.array(find_channel(st, NS_channel)) # Try to find NS channel from function input
+            EW_filt = np.array(find_channel(st, EW_channel)) # Try to find EW channel from function input
+            Z_filt = np.array(find_channel(st, Z_channel))
+
                 # Warnings for missing channels.
             if Z_filt is None:
                 print(f"Warning: Missing Z channel for filtered {station}. Skipping."
@@ -1081,6 +1093,7 @@ def signal_to_noise(wave_dict,
             if EW_filt is None:
                 print(f"Warning: Missing EW channel for filtered {station}. Skipping."
                         "This may cause issues if the EW channel is not missing in filtered_dict.")
+
 
             # Calculate noise to signal ratio for each station and component, and store in a new dictionary.
             if Z is not None and Z_filt is not None:
@@ -1223,102 +1236,3 @@ def find_channel(stream, options):
     # If none are found
     return None 
 
-def signal_to_noise(wave_dict, 
-                    filtered_dict,
-                    NS_channel,
-                    EW_channel,
-                    Z_channel):
-    """
-    Calculates the noise to signal ratio for the 
-    Z, NS and EW components of seismic data and 
-    stores the results as a dictionary.
-    Parameters:
-    wave_dict (dict):
-        A wave dictionary containing seismic waveform data.
-    filtered_dict (dict):
-        A dictionary containing filtered seismic waveform data.
-    Z_channel (list of str):
-        List of channel codes for the Z component.
-    NS_channel (list of str):
-        List of channel codes for the NS component.
-    EW_channel (list of str):
-        List of channel codes for the EW component.
-    """
-    
-    # Set up seismic waveform data from wave_dict and the filtered data from filtered_dict 
-    # and calculate the noise to signal ratio.
-    # Setup Storage
-    ratio_dict = {}
-    # Loop through wave_dict, find the channels, and store the data in a new dictionary
-    for i, (station, stream) in enumerate(wave_dict.items(), start=2):
-        print(f"Processing {station}...")
-        st = Stream(stream)
-        st.sort(['channel'])
-        NS = np.array(find_channel(st, NS_channel)) # Try to find NS channel from function input
-        EW = np.array(find_channel(st, EW_channel)) # Try to find EW channel from function input
-        Z = np.array(find_channel(st, Z_channel))
-
-        # Warnings for missing channels.
-        if Z is None:
-            print(f"Warning: Missing Z channel for {station}. Skipping."
-                    "This may cause issues if the Z channel is not missing in wave_dict.")
-        if NS is None:
-            print(f"Warning: Missing NS channel for {station}. Skipping."
-                    "This may cause issues if the NS channel is not missing in wave_dict.")
-        if EW is None:
-            print(f"Warning: Missing EW channel for {station}. Skipping."
-                    "This may cause issues if the EW channel is not missing in wave_dict.")
-
-        # Filtered Waveform Data
-        for i, (station, stream) in enumerate(filtered_dict.items(), start=2):
-            st = Stream(stream)
-            st.sort(['channel'])
-            NS_filt = np.array(find_channel(st, NS_channel)) # Try to find NS channel from function input
-            EW_filt = np.array(find_channel(st, EW_channel)) # Try to find EW channel from function input
-            Z_filt = np.array(find_channel(st, Z_channel))
-
-                # Warnings for missing channels.
-            if Z_filt is None:
-                print(f"Warning: Missing Z channel for filtered {station}. Skipping."
-                        "This may cause issues if the Z channel is not missing in filtered_dict.")
-            if NS_filt is None:
-                print(f"Warning: Missing NS channel for filtered {station}. Skipping."
-                        "This may cause issues if the NS channel is not missing in filtered_dict.")
-            if EW_filt is None:
-                print(f"Warning: Missing EW channel for filtered {station}. Skipping."
-                        "This may cause issues if the EW channel is not missing in filtered_dict.")
-
-
-            # Calculate noise to signal ratio for each station and component, and store in a new dictionary.
-            if Z is not None and Z_filt is not None:
-                noise_Z = Z - Z_filt
-                signal_P_Z = np.mean(Z_filt ** 2)
-                noise_P_Z = np.mean(noise_Z ** 2)
-                ratio_Z = 10 * np.log10(signal_P_Z / noise_P_Z)
-            else:
-                ratio_Z = None
-                print(f"No Data for Z component in {station}. Skipping.")
-            # NS component
-            if NS is not None and NS_filt is not None:
-                noise_NS = NS - NS_filt
-                signal_P_NS = np.mean(NS_filt ** 2)
-                noise_P_NS = np.mean(noise_NS ** 2)
-                ratio_NS = 10 * np.log10(signal_P_NS / noise_P_NS)
-            else:
-                ratio_NS = None
-                print(f"No Data for NS component in {station}. Skipping.")
-            # EW component
-            if EW is not None and EW_filt is not None:
-                noise_EW = EW - EW_filt
-                signal_P_EW = np.mean(EW_filt ** 2)
-                noise_P_EW = np.mean(noise_EW ** 2)
-                ratio_EW = 10 * np.log10(signal_P_EW / noise_P_EW)
-            else:
-                ratio_EW = None
-                print(f"No Data for EW component in {station}. Skipping.")
-            # Store the ratios in a new dictionary
-            ratio_dict[station] = {"Z": float(ratio_Z) if ratio_Z is not None else None,
-                                "NS": float(ratio_NS) if ratio_NS is not None else None,
-                                "EW": float(ratio_EW) if ratio_EW is not None else None}
-
-    return ratio_dict

@@ -1156,6 +1156,9 @@ def montecarlo_optimal_snr(wind_speed,
             List of channel codes for the EW component.
         Z_channel (list of str):
             List of channel codes for the Z component.
+
+    Returns:
+        The statistics for the iteration with the highest avg R squared value.
     """
 
     # Store results
@@ -1231,7 +1234,7 @@ def montecarlo_optimal_snr(wind_speed,
         print(f"Average R²: {best_result['avg_r2']:.4f}")
         results.append(station_results)
 
-    return results
+    return best_result
 
 def find_channel(stream, options):
     """
@@ -1254,3 +1257,48 @@ def find_channel(stream, options):
     # If none are found
     return None 
 
+def plot_statistics(monte_result):
+
+    """
+    Using the best result from montecarlo_optimal_snr(),
+    plot wind speed against each channel's SNR and fit
+    and a linear trend.
+
+    Parameters:
+        monte_result (dict):
+            The output of montecarlo_optimal_snr.
+    """
+    
+    NS_model = monte_result['NS_model']
+    EW_model = monte_result['EW_model']
+    Z_model = monte_result['Z_model']
+
+    windarray = monte_result['windarray']
+    WS = np.array(monte_result['windarray'].reshape(-1))
+    NS = monte_result['NS']
+    EW = monte_result['EW']
+    Z = monte_result['Z']
+
+    fig, ax = plt.subplots(3,1,figsize = (10,8))
+
+    
+    ax[0].scatter(WS, EW)
+    ax[0].plot(WS, EW_model.predict(windarray), color = 'r')
+    ax[0].set_title(f"EW (R² = {monte_result['EW_r2']:.3f})")
+
+    ax[1].scatter(WS, NS)
+    ax[1].plot(WS, NS_model.predict(windarray), color = 'r')
+    ax[1].set_title(f"NS (R² = {monte_result['NS_r2']:.3f})")
+
+
+    ax[2].scatter(WS, Z)
+    ax[2].plot(WS, Z_model.predict(windarray), color = 'r')
+    ax[2].set_title(f"Z (R² = {monte_result['Z_r2']:.3f})")
+
+
+    plt.xlabel('Wind Speed (km/hr)')
+    for a in ax:
+        a.set_ylabel('SNR (dB)')
+    plt.suptitle('Wind Speed vs Seismic SNR', fontsize = 20)
+    plt.tight_layout()
+    

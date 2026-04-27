@@ -1043,12 +1043,12 @@ def signal_to_noise(wave_dict,
         A wave dictionary containing seismic waveform data.
     filtered_dict (dict):
         A dictionary containing filtered seismic waveform data.
-    Z_channel (list of str):
-        List of channel codes for the Z component.
     NS_channel (list of str):
-        List of channel codes for the NS component.
+            List of channel codes for the NS component.
     EW_channel (list of str):
         List of channel codes for the EW component.
+    Z_channel (list of str):
+        List of channel codes for the Z component.
     """
     
     # Set up seismic waveform data from wave_dict and the filtered data from filtered_dict 
@@ -1057,7 +1057,6 @@ def signal_to_noise(wave_dict,
     ratio_dict = {}
     # Loop through wave_dict, find the channels, and store the data in a new dictionary
     for i, (station, stream) in enumerate(wave_dict.items(), start=2):
-        print(f"Processing {station}...")
         st = Stream(stream)
         st.sort(['channel'])
         NS = np.array(find_channel(st, NS_channel)) # Try to find NS channel from function input
@@ -1133,9 +1132,32 @@ def montecarlo_optimal_snr(wind_speed,
                            wave_dict,
                            freq_range,
                            n_iterations,
-                           t_0,
-                           n_days):
-    
+                           NS_channel,
+                           EW_channel,
+                           Z_channel):
+    """
+    Compute a montecarlo test optimising the bandpass filter
+    to find the best correlation between Wind Speed and Seismic Signal.
+
+    Parameters:
+        wind_speed (array):
+            An array of wind speed data in format 
+            wind_speed[0] (time), wind_speed[1] (speed array).
+        wave_dict (dict):
+             A wave dictionary containing seismic waveform data.
+        freq_range (tuple):
+            Two values indicating the minimum and maximum frequency (Hz) to test.
+            e.g (5, 45).
+        n_iterations (int):
+            Number of trials for the montecarlo test.
+        NS_channel (list of str):
+            List of channel codes for the NS component.
+        EW_channel (list of str):
+            List of channel codes for the EW component.
+        Z_channel (list of str):
+            List of channel codes for the Z component.
+    """
+
     # Store results
     results = []
     station_list = list(wave_dict.keys())
@@ -1154,36 +1176,32 @@ def montecarlo_optimal_snr(wind_speed,
             # Calculate SNR for each 30-min window
             
             snr_test = []
-            t_test = t_0
+            aws_times = wind_speed[0]   # timestamps
+            wind_speed_values = wind_speed[1]   # wind speeds
 
-            for j in range(0, 48*n_days):
+            for time in aws_times:
+                t_test = UTC(str(time))
                 trim_test = select_time(CWA_test, t_test, 1800)
                 trim_wave_dict = select_time({station: wave_dict[station]}, t_test, 1800)
-                snr_test.append(signal_to_noise((trim_wave_dict[0]), trim_test[0]))
-                t_test += 1800
-            
+                snr_test.append(signal_to_noise(trim_wave_dict, trim_test,  NS_channel, EW_channel, Z_channel))
+                
             # Extract Z, NS, EW components
             Z_test = [snr_test[k][station]['Z'] for k in range(len(snr_test))]
             NS_test = [snr_test[k][station]['NS'] for k in range(len(snr_test))]
             EW_test = [snr_test[k][station]['EW'] for k in range(len(snr_test))]
             
-            # Trim to match wind speed data length
-            n = min(len(wind_speed), len(Z_test))
-            Z_test_n = Z_test[:n]
-            NS_test_n = NS_test[:n]
-            EW_test_n = EW_test[:n]
             
             # Calculate R² for each component
-            windarray = np.array(wind_speed.reshape(-1, 1))
+            windarray = np.array(wind_speed_values.reshape(-1, 1))
             
-            Z_model = LinearRegression().fit(windarray, Z_test_n)
-            Z_r_sq = Z_model.score(windarray, Z_test_n)
+            Z_model = LinearRegression().fit(windarray, Z_test)
+            Z_r_sq = Z_model.score(windarray, Z_test)
             
-            NS_model = LinearRegression().fit(windarray, NS_test_n)
-            NS_r_sq = NS_model.score(windarray, NS_test_n)
+            NS_model = LinearRegression().fit(windarray, NS_test)
+            NS_r_sq = NS_model.score(windarray, NS_test)
             
-            EW_model = LinearRegression().fit(windarray, EW_test_n)
-            EW_r_sq = EW_model.score(windarray, EW_test_n)
+            EW_model = LinearRegression().fit(windarray, EW_test)
+            EW_r_sq = EW_model.score(windarray, EW_test)
             
             # Store results
             station_results.append({
@@ -1193,9 +1211,9 @@ def montecarlo_optimal_snr(wind_speed,
                 'NS_r2': NS_r_sq,
                 'EW_r2': EW_r_sq,
                 'avg_r2': (Z_r_sq + NS_r_sq + EW_r_sq) / 3,
-                'Z': Z_test_n,
-                'NS': NS_test_n,
-                'EW': EW_test_n,
+                'Z': Z_test,
+                'NS': NS_test,
+                'EW': EW_test,
                 'Z_model': Z_model,
                 'NS_model': NS_model,
                 'EW_model': EW_model,

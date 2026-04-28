@@ -11,6 +11,7 @@ from sklearn.linear_model import LinearRegression
 from obspy import Trace
 from obspy import Stream
 from collections import defaultdict
+from datetime import timedelta
 
 def read_data(path, 
               station_code, 
@@ -1184,7 +1185,7 @@ def montecarlo_optimal_snr(wind_speed,
 
             for time in aws_times:
                 t_test = UTC(str(time))
-                trim_test = select_time(CWA_test, t_test, 1800)
+                trim_test = select_time(CWA_test, t_test - timedelta(minutes=30), 1800) # Minus 30 minutes as each AWS Timestamp is a past 30 min average 
                 trim_wave_dict = select_time({station: wave_dict[station]}, t_test, 1800)
                 snr_test.append(signal_to_noise(trim_wave_dict, trim_test,  NS_channel, EW_channel, Z_channel))
                 

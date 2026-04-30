@@ -12,6 +12,9 @@ from obspy import Trace
 from obspy import Stream
 from collections import defaultdict
 from datetime import timedelta
+from obspy import read
+
+
 
 def read_data(path, 
               station_code, 
@@ -939,11 +942,14 @@ def apply_filter(wave_dict,
                  freqmax=None, 
                  freq=None, 
                  corners=4, 
-                 zerophase=True):
-    
+                 zerophase=True,
+                 save_mseed=False,
+                 config=None,
+                 read_file=True,
+                 filename='default'):
+
     """
     Apply a filter to seismic waveform data stored in a dictionary without altering the original.
-    Copied from align.py
 
     Parameters:
     wave_dict (dict):
@@ -962,44 +968,82 @@ def apply_filter(wave_dict,
         Number of corners for the filter.
     zerophase (bool):
         True/False. If True, apply a zero-phase filter.
+    save_mseed (bool):
+        True/False. True to save as mseed file.
+    config (dict):
+        Information from a config file containing the local "seismic_data_path".
+    read_file (bool):
+        True/False. True to switch on file checking.
+    filename (str):
+        Title of saved mseed file.
 
     Returns:
     filtered_dict (dict):
         Dictionary containing filtered seismic waveform data.
     """
 
-    # Setup dictionary
-    filtered_dict = {}
+    # Path 
+    base_path = Path(config["seismic_data_path"]) if config else Path(".")
+    base_path.mkdir(parents=True, exist_ok=True)
+    filetitle = f"{filename}_{filter_type}"
+    file_path = (base_path / filetitle).with_suffix(".mseed")
 
-    # Loop through and apply filter to the traces
-    for station_name, traces in wave_dict.items():
-        st = Stream([tr.copy() for tr in traces]) # Copy to avoid overwriting data
+    # Read file if it exists
+    if file_path.exists():
+        if read_file == True:
+            print(f"Reading existing file: {file_path}")
+            stream = read(str(file_path))
+            filtered_dict = defaultdict(list)
+            for tr in stream:
+                filtered_dict[tr.stats.station].append(tr)
 
-        if filter_type in ('bandpass', 'bandstop'):
-            st.filter(type=filter_type, 
-                      freqmin=freqmin, 
-                      freqmax=freqmax, 
-                      corners=corners, 
-                      zerophase=zerophase)
+    else:
             
-        elif filter_type in ('lowpass', 'highpass'): 
-            st.filter(type=filter_type, 
-                      freq=freq, 
-                      corners=corners, 
-                      zerophase=zerophase)
-            
-        else:
-            raise ValueError(f"Unsupported filter type: {filter_type}") #'lowpass_cheby_2', 'lowpass_fir', 'remez_fir' currently not setup
+        # Setup dictionary
+        filtered_dict = defaultdict(list)
+        streams = []
+        # Loop through and apply filter to the traces
+        for station_name, traces in wave_dict.items():
+            st = Stream([tr.copy() for tr in traces]) # Copy to avoid overwriting data
 
-        filtered_dict[station_name] = st.traces # Write to a dictionary
+            if filter_type in ('bandpass', 'bandstop'):
+                st.filter(type=filter_type, 
+                        freqmin=freqmin, 
+                        freqmax=freqmax, 
+                        corners=corners, 
+                        zerophase=zerophase)
+                streams.append(st)
+
+            elif filter_type in ('lowpass', 'highpass'): 
+                st.filter(type=filter_type, 
+                        freq=freq, 
+                        corners=corners, 
+                        zerophase=zerophase)
+                streams.append(st)
+
+            else:
+                raise ValueError(f"Unsupported filter type: {filter_type}") #'lowpass_cheby_2', 'lowpass_fir', 'remez_fir' currently not setup
+
+            filtered_dict[station_name] = st.traces # Write to a dictionary
         
+        # Save as mseed file
+        if save_mseed == True:
+            merged_stream = streams[0].copy() # Copy to avoid overwriting data
+            for st in streams[1:]:
+                merged_stream += st
+            merged_stream.merge()
+
+            merged_stream.write(f'{str(file_path)}', format="MSEED")
+
     return filtered_dict
 
 def select_time(wave_dict, 
                 t_start, 
-                duration):
-    
-    ## Copied from align.py
+                duration,
+                save_mseed=False,
+                config=None,
+                read_file=True,
+                filename='default'):
     
     """
     Select a specific time window from seismic waveform data stored in a dictionary without altering the original.
@@ -1011,22 +1055,54 @@ def select_time(wave_dict,
         Start time for the time window.
     duration (float):
         Duration of the time window in seconds.
-    
+    save_mseed (bool):
+        True/False. True to save as mseed file.
+    config (dict):
+        Information from a config file containing the local "seismic_data_path".
+    read_file (bool):
+        True/False. True to switch on file checking.
+    filename (str):
+        Title of saved mseed file.
     Returns:
     new_dict (dict):
         Dictionary containing selected seismic waveform data.
     """
 
-    # Establish timespan
-    t_end = t_start + duration
+    # Path 
+    base_path = Path(config["seismic_data_path"]) if config else Path(".")
+    base_path.mkdir(parents=True, exist_ok=True)
+    filetitle = f"{filename}_{duration}s_trim"
+    file_path = (base_path / filetitle).with_suffix(".mseed")
 
-    # Trim to desired timespan and write to a direction
-    new_dict = defaultdict(list)
-    for station_name in wave_dict:
-        st = Stream(wave_dict[station_name]).copy() # Copy to avoid overwriting data
-        st.trim(starttime=t_start, endtime=t_end, pad=False)
+    # Read file if it exists
+    if file_path.exists():
+        if read_file == True:
+            print(f"Reading existing file: {file_path}")
+            stream = read(str(file_path))
+            new_dict = defaultdict(list)
+            for tr in stream:
+                new_dict[tr.stats.station].append(tr)
 
-        new_dict[station_name].extend(st.traces)
+    else:
+        # Establish timespan
+        t_end = t_start + duration
+        streams = []
+        # Trim to desired timespan and write to a direction
+        new_dict = defaultdict(list)
+        for station_name in wave_dict:
+            st = Stream(wave_dict[station_name]).copy() # Copy to avoid overwriting data
+            st.trim(starttime=t_start, endtime=t_end, pad=False)
+            streams.append(st)
+            new_dict[station_name].extend(st.traces)
+
+        # Save as mseed file
+        if save_mseed == True:
+            merged_stream = streams[0].copy() # Copy to avoid overwriting data
+            for st in streams[1:]:
+                merged_stream += st
+            merged_stream.merge()
+
+            merged_stream.write(f'{str(file_path)}', format="MSEED")
 
     return new_dict
 

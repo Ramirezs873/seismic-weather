@@ -936,8 +936,8 @@ def wind_seis_energy_scatter(seismic_energy,
     plt.ylim(np.percentile(y, 2.5), np.percentile(y, 100 - 2.5))
     plt.tight_layout()
     
-def apply_filter(wave_dict, 
-                 filter_type, 
+def apply_filter(wave_dict = None, 
+                 filter_type = None, 
                  freqmin=None, 
                  freqmax=None, 
                  freq=None, 
@@ -946,7 +946,7 @@ def apply_filter(wave_dict,
                  save_mseed=False,
                  config=None,
                  read_file=True,
-                 filename='default'):
+                 filename='default_filter'):
 
     """
     Apply a filter to seismic waveform data stored in a dictionary without altering the original.
@@ -985,8 +985,7 @@ def apply_filter(wave_dict,
     # Path 
     base_path = Path(config["seismic_data_path"]) if config else Path(".")
     base_path.mkdir(parents=True, exist_ok=True)
-    filetitle = f"{filename}_{filter_type}"
-    file_path = (base_path / filetitle).with_suffix(".mseed")
+    file_path = (base_path / filename).with_suffix(".mseed")
 
     # Read file if it exists
     if file_path.exists():
@@ -1034,16 +1033,17 @@ def apply_filter(wave_dict,
             merged_stream.merge()
 
             merged_stream.write(f'{str(file_path)}', format="MSEED")
+            print(f'Saved as {file_path}')
 
     return filtered_dict
 
-def select_time(wave_dict, 
-                t_start, 
-                duration,
+def select_time(wave_dict=None, 
+                t_start=None, 
+                duration=None,
                 save_mseed=False,
                 config=None,
                 read_file=True,
-                filename='default'):
+                filename='default_trim'):
     
     """
     Select a specific time window from seismic waveform data stored in a dictionary without altering the original.
@@ -1071,8 +1071,7 @@ def select_time(wave_dict,
     # Path 
     base_path = Path(config["seismic_data_path"]) if config else Path(".")
     base_path.mkdir(parents=True, exist_ok=True)
-    filetitle = f"{filename}_{duration}s_trim"
-    file_path = (base_path / filetitle).with_suffix(".mseed")
+    file_path = (base_path / filename).with_suffix(".mseed")
 
     # Read file if it exists
     if file_path.exists():
@@ -1082,7 +1081,9 @@ def select_time(wave_dict,
             new_dict = defaultdict(list)
             for tr in stream:
                 new_dict[tr.stats.station].append(tr)
-
+            
+            return new_dict
+        
     else:
         # Establish timespan
         t_end = t_start + duration
@@ -1103,8 +1104,10 @@ def select_time(wave_dict,
             merged_stream.merge()
 
             merged_stream.write(f'{str(file_path)}', format="MSEED")
+            print(f'Saved as {file_path}')
 
     return new_dict
+
 
 def signal_to_noise(wave_dict, 
                     filtered_dict,
@@ -1379,3 +1382,111 @@ def plot_statistics(monte_result):
     plt.suptitle('Wind Speed vs Seismic SNR', fontsize = 20)
     plt.tight_layout()
     
+def power_wind_monte(wind_speed,
+                     use_file = False,
+                     wave_dict = None,
+                     seismic_mseed_name=None,
+                     config=None):
+
+    if use_file == True:
+        # Path 
+        base_path = Path(config["seismic_data_path"]) if config else Path(".")
+        base_path.mkdir(parents=True, exist_ok=True)
+        file_path = (base_path / seismic_mseed_name).with_suffix(".mseed")
+
+        # Read file if it exists
+        if file_path.exists():
+            print(f"Reading existing file: {file_path}")
+            stream = read(str(file_path))
+            wave_dict = defaultdict(list)
+            for tr in stream:
+                wave_dict[tr.stats.station].append(tr)
+        else:
+            print("No File Found")
+
+    else:
+        if wave_dict == None:
+            print('wave_dict not selected. Please input a file or a dictionary. (default: use_file = False )')
+            return None
+    
+    station_list = list(wave_dict.keys())
+    aws_times = wind_speed[0]   # timestamps
+    wind_speed_values = wind_speed[1]   # wind speeds
+    results = []
+
+    for station in station_list:
+        station_results = []
+
+        for f1 in range(1,3):
+                for f2 in range(2,5):
+                    if f1<f2:
+                        filt = apply_filter({station: wave_dict[station]}, 
+                                            filter_type = 'bandpass',
+                                            freqmin= f1,
+                                            freqmax = f2)
+                        
+                        Z_power = []
+                        NS_power = []
+                        EW_power = []
+
+                        for time in aws_times:
+                            t_test = UTC(str(time))
+                            trim_wave_dict = select_time(filt, 
+                                                        t_test- timedelta(minutes=30), 
+                                                        1800) # Minus 30 minutes as each AWS Timestamp is a past 30 min average 
+                            st = Stream(trim_wave_dict[station])
+
+                            # Puts in alphabetical order. 
+                            # E, N, Z
+                            st.sort(['channel'])   
+
+                            EW = st[0].data
+                            NS = st[1].data
+                            Z = st[2].data
+
+                            EW_power.append(np.mean(EW**2))
+                            NS_power.append(np.mean(NS**2))
+                            Z_power.append(np.mean(Z**2))
+                            
+                        # Calculate R² for each component
+                        windarray = np.array(wind_speed_values).reshape(-1, 1)
+                        
+                        Z_model = LinearRegression().fit(windarray, Z_power)
+                        Z_r_sq = Z_model.score(windarray, Z_power)
+                        
+                        NS_model = LinearRegression().fit(windarray, NS_power)
+                        NS_r_sq = NS_model.score(windarray, NS_power)
+                        
+                        EW_model = LinearRegression().fit(windarray, EW_power)
+                        EW_r_sq = EW_model.score(windarray, EW_power)
+
+                        # Store results
+                        station_results.append({
+                            'fmin': f1,
+                            'fmax': f2,
+                            'Z_r2': Z_r_sq,
+                            'NS_r2': NS_r_sq,
+                            'EW_r2': EW_r_sq,
+                            'avg_r2': (Z_r_sq + NS_r_sq + EW_r_sq) / 3,
+                            'Z_power': Z_power,
+                            'NS_power': NS_power,
+                            'EW_power': EW_power,
+                            'Z_model': Z_model,
+                            'NS_model': NS_model,
+                            'EW_model': EW_model,
+                            'windarray': windarray
+                        })
+
+                        print(f"Completed Iteration {f1}Hz-{f2}Hz")
+        # Find best result
+        best_result = max(station_results, key=lambda x: x['avg_r2'])
+        print(f"\nBest frequency range for {station}: {best_result['fmin']} - {best_result['fmax']} Hz")
+        print(f"Z R²: {best_result['Z_r2']:.4f}")
+        print(f"NS R²: {best_result['NS_r2']:.4f}")
+        print(f"EW R²: {best_result['EW_r2']:.4f}")
+        print(f"Average R²: {best_result['avg_r2']:.4f}")
+        results.append(station_results)
+
+        
+
+    return best_result, results

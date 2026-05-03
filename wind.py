@@ -1383,8 +1383,10 @@ def plot_statistics(monte_result):
     plt.tight_layout()
     
 def power_wind_monte(wind_speed,
-                     use_file = False,
                      wave_dict = None,
+                     use_file = False,
+                     fmin = 1,
+                     fmax = 49,
                      seismic_mseed_name=None,
                      config=None):
 
@@ -1417,8 +1419,8 @@ def power_wind_monte(wind_speed,
     for station in station_list:
         station_results = []
 
-        for f1 in range(1,3):
-                for f2 in range(2,5):
+        for f1 in range(fmin, fmax-1):
+                for f2 in range(fmin+1, fmax):
                     if f1<f2:
                         filt = apply_filter({station: wave_dict[station]}, 
                                             filter_type = 'bandpass',

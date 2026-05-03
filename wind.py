@@ -1340,13 +1340,15 @@ def find_channel(stream, options):
 def plot_statistics(monte_result):
 
     """
-    Using the best result from montecarlo_optimal_snr(),
+    Using the best result from montecarlo_optimal_snr() 
+    or power_wind_monte(),
     plot wind speed against each channel's SNR and fit
     and a linear trend.
 
     Parameters:
         monte_result (dict):
-            The output of montecarlo_optimal_snr.
+            The output of montecarlo_optimal_snr
+            or power_wind_monte().
     """
     
     NS_model = monte_result['NS_model']
@@ -1470,9 +1472,9 @@ def power_wind_monte(wind_speed,
                             'NS_r2': NS_r_sq,
                             'EW_r2': EW_r_sq,
                             'avg_r2': (Z_r_sq + NS_r_sq + EW_r_sq) / 3,
-                            'Z_power': Z_power,
-                            'NS_power': NS_power,
-                            'EW_power': EW_power,
+                            'Z': Z_power,
+                            'NS': NS_power,
+                            'EW': EW_power,
                             'Z_model': Z_model,
                             'NS_model': NS_model,
                             'EW_model': EW_model,

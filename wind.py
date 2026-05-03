@@ -1425,7 +1425,7 @@ def power_wind_monte(wind_speed,
                         filt = apply_filter({station: wave_dict[station]}, 
                                             filter_type = 'bandpass',
                                             freqmin= f1,
-                                            freqmax = f2)
+                                            freqmax =f2)
                         
                         Z_power = []
                         NS_power = []

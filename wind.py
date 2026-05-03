@@ -1419,8 +1419,8 @@ def power_wind_monte(wind_speed,
     for station in station_list:
         station_results = []
 
-        for f1 in range(fmin, fmax-1):
-                for f2 in range(fmin+1, fmax):
+        for f1 in range(fmin, fmax):
+                for f2 in range(fmin+1, fmax+1):
                     if f1<f2:
                         filt = apply_filter({station: wave_dict[station]}, 
                                             filter_type = 'bandpass',

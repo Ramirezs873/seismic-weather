@@ -1337,7 +1337,8 @@ def find_channel(stream, options):
     # If none are found
     return None 
 
-def plot_statistics(monte_result):
+def plot_statistics(monte_result,
+                    ylabel = 'SNR (dB)'):
 
     """
     Using the best result from montecarlo_optimal_snr() 
@@ -1349,6 +1350,9 @@ def plot_statistics(monte_result):
         monte_result (dict):
             The output of montecarlo_optimal_snr
             or power_wind_monte().
+        ylabel (str):
+            Y label and adjusts suptitle. 
+            Change to power if using power_wind_monte() output.
     """
     
     NS_model = monte_result['NS_model']
@@ -1380,8 +1384,9 @@ def plot_statistics(monte_result):
 
     plt.xlabel('Wind Speed (km/hr)')
     for a in ax:
-        a.set_ylabel('SNR (dB)')
-    plt.suptitle('Wind Speed vs Seismic SNR', fontsize = 20)
+        a.set_ylabel(ylabel)
+    title = 'Wind Speed vs' + ' ' + ylabel
+    plt.suptitle(title, fontsize = 20)
     plt.tight_layout()
     
 def power_wind_monte(wind_speed,

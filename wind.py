@@ -8,6 +8,8 @@ from obspy import UTCDateTime as UTC
 from scipy.stats import linregress
 import random
 from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
 from obspy import Trace
 from obspy import Stream
 from collections import defaultdict
@@ -1427,7 +1429,7 @@ def power_wind_monte(wind_speed,
         station_results = []
 
         for f1 in range(fmin, fmax):
-                for f2 in range(fmin+1, fmax+1):
+                for f2 in range(f1+1, fmax+1):
                     if f1<f2:
                         filt = apply_filter({station: wave_dict[station]}, 
                                             filter_type = 'bandpass',
@@ -1449,25 +1451,47 @@ def power_wind_monte(wind_speed,
                             # E, N, Z
                             st.sort(['channel'])   
 
-                            EW = st[0].data
-                            NS = st[1].data
-                            Z = st[2].data
+                            EW = st.select(channel="*E")[0].data
+                            NS = st.select(channel="*N")[0].data
+                            Z  = st.select(channel="*Z")[0].data
 
                             EW_power.append(np.mean(EW**2))
                             NS_power.append(np.mean(NS**2))
                             Z_power.append(np.mean(Z**2))
                             
+                        WS = np.array(wind_speed_values)
+                        Z_power = np.array(Z_power)
+                        NS_power = np.array(NS_power)
+                        EW_power = np.array(EW_power)
+
+                        # Remove outliers
+                        data = np.column_stack([WS, Z_power, NS_power, EW_power])
+
+                        mean = np.nanmean(data, axis=0)
+                        std = np.nanstd(data, axis=0)
+
+                        # Avoid divide-by-zero
+                        std[std == 0] = 1
+
+                        z_scores = (data - mean) / std
+                        mask = np.all(np.abs(z_scores) < 3, axis=1)
+
+                        WS_filt = WS[mask]
+                        Z_filt = Z_power[mask]
+                        NS_filt = NS_power[mask]
+                        EW_filt = EW_power[mask]
+                        
+                        windarray = np.array(WS_filt).reshape(-1, 1)
+                        
                         # Calculate R² for each component
-                        windarray = np.array(wind_speed_values).reshape(-1, 1)
+                        Z_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(windarray, Z_filt)
+                        Z_r_sq = Z_model.score(windarray, Z_filt)
                         
-                        Z_model = LinearRegression().fit(windarray, Z_power)
-                        Z_r_sq = Z_model.score(windarray, Z_power)
+                        NS_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(windarray, NS_filt)
+                        NS_r_sq = NS_model.score(windarray, NS_filt)
                         
-                        NS_model = LinearRegression().fit(windarray, NS_power)
-                        NS_r_sq = NS_model.score(windarray, NS_power)
-                        
-                        EW_model = LinearRegression().fit(windarray, EW_power)
-                        EW_r_sq = EW_model.score(windarray, EW_power)
+                        EW_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(windarray, EW_filt)
+                        EW_r_sq = EW_model.score(windarray, EW_filt)
 
                         # Store results
                         station_results.append({
@@ -1477,16 +1501,16 @@ def power_wind_monte(wind_speed,
                             'NS_r2': NS_r_sq,
                             'EW_r2': EW_r_sq,
                             'avg_r2': (Z_r_sq + NS_r_sq + EW_r_sq) / 3,
-                            'Z': Z_power,
-                            'NS': NS_power,
-                            'EW': EW_power,
+                            'Z': Z_filt,
+                            'NS': NS_filt,
+                            'EW': EW_filt,
                             'Z_model': Z_model,
                             'NS_model': NS_model,
                             'EW_model': EW_model,
                             'windarray': windarray
                         })
 
-                        print(f"Completed Iteration {f1}Hz-{f2}Hz")
+                        print(f"Completed Iteration {f1}Hz-{f2}Hz. AVG R Sqaured = {(Z_r_sq + NS_r_sq + EW_r_sq) / 3}")
         # Find best result
         best_result = max(station_results, key=lambda x: x['avg_r2'])
         print(f"\nBest frequency range for {station}: {best_result['fmin']} - {best_result['fmax']} Hz")

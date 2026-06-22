@@ -1316,7 +1316,7 @@ def montecarlo_optimal_snr(wind_speed,
         print(f"Average R²: {best_result['avg_r2']:.4f}")
         results.append(station_results)
 
-    return best_result
+    return best_result, results
 
 def find_channel(stream, options):
     """
@@ -1397,7 +1397,9 @@ def power_wind_monte(wind_speed,
                      fmin = 1,
                      fmax = 49,
                      seismic_mseed_name=None,
-                     config=None):
+                     config=None,
+                     csv = False,
+                     csv_title = 'monte_resutls'):
 
     if use_file == True:
         # Path 
@@ -1424,8 +1426,11 @@ def power_wind_monte(wind_speed,
     aws_times = wind_speed[0]   # timestamps
     wind_speed_values = wind_speed[1]   # wind speeds
     results = []
+    all_results = []
+    best_results = []
 
     for station in station_list:
+        
         station_results = []
 
         for f1 in range(fmin, fmax):
@@ -1513,6 +1518,7 @@ def power_wind_monte(wind_speed,
                         print(f"Completed Iteration {f1}Hz-{f2}Hz. AVG R Sqaured = {(Z_r_sq + NS_r_sq + EW_r_sq) / 3}")
         # Find best result
         best_result = max(station_results, key=lambda x: x['avg_r2'])
+        best_results.append({'station': station, **best_result})
         print(f"\nBest frequency range for {station}: {best_result['fmin']} - {best_result['fmax']} Hz")
         print(f"Z R²: {best_result['Z_r2']:.4f}")
         print(f"NS R²: {best_result['NS_r2']:.4f}")
@@ -1520,6 +1526,47 @@ def power_wind_monte(wind_speed,
         print(f"Average R²: {best_result['avg_r2']:.4f}")
         results.append(station_results)
 
-        
+        if csv == True:
+            for result in station_results:
+                all_results.append({
+                    'station': station,
+                    'fmin': result['fmin'],
+                    'fmax': result['fmax'],
+                    'Z_r2': result['Z_r2'],
+                    'NS_r2': result['NS_r2'],
+                    'EW_r2': result['EW_r2'],
+                    'avg_r2': result['avg_r2']
+                    })
 
-    return best_result, results
+    if csv == True:
+        df = pd.DataFrame(all_results)
+        csv_name = f"{csv_title}.csv"
+        df.to_csv(csv_name, index=False)
+        print(f"Results saved to {csv_name}")
+
+
+    return best_results, results
+
+def load_seis_data(config = None, filename = None, path = None):
+
+    if config:
+        # Path 
+        base_path = Path(config["seismic_data_path"]) if config else Path(".")
+        base_path.mkdir(parents=True, exist_ok=True)
+        if filename:
+            file_path = (base_path / filename).with_suffix(".mseed")
+        else:
+            print("Please provide a filename that exists in the seismic data path.")
+            return None
+    elif path:
+            file_path = Path(path)
+    else:
+        print("Please provide either a filename in the config seismic data path or a path to the seismic data.")
+        return None
+
+    print(f"Reading existing file: {file_path}")
+    stream = read(str(file_path))
+    new_dict = defaultdict(list)
+    for tr in stream:
+        new_dict[tr.stats.station].append(tr)
+    return new_dict

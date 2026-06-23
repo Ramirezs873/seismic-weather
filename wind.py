@@ -1412,7 +1412,7 @@ def power_wind_monte(wind_speed,
                      seismic_mseed_name=None,
                      config=None,
                      csv = False,
-                     csv_title = 'monte_resutls'):
+                     csv_title = 'monte_results'):
 
     if use_file == True:
         # Path 

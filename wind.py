@@ -1345,8 +1345,8 @@ def plot_statistics(monte_result,
     """
     Using the best result from montecarlo_optimal_snr() 
     or power_wind_monte(),
-    plot wind speed against each channel's SNR and fit
-    and a linear trend.
+    plot wind speed against each channel's power and fit
+    the trendline.
 
     Parameters:
         monte_result (dict):
@@ -1357,6 +1357,7 @@ def plot_statistics(monte_result,
             Change to power if using power_wind_monte() output.
     """
     
+    # Gather variables
     NS_model = monte_result['NS_model']
     EW_model = monte_result['EW_model']
     Z_model = monte_result['Z_model']
@@ -1366,28 +1367,40 @@ def plot_statistics(monte_result,
     NS = monte_result['NS']
     EW = monte_result['EW']
     Z = monte_result['Z']
+    fmin = monte_result['fmin']
+    fmax = monte_result['fmax']
 
+    # Sort variables for simple plotting
+    idx = np.argsort(WS)
+
+    WS_sorted = WS[idx]
+    EW_pred = EW_model.predict(windarray)[idx]
+    NS_pred = NS_model.predict(windarray)[idx]
+    Z_pred = Z_model.predict(windarray)[idx]
+
+    # Plot
     fig, ax = plt.subplots(3,1,figsize = (10,8))
 
-    
+    # EW
     ax[0].scatter(WS, EW)
-    ax[0].plot(WS, EW_model.predict(windarray), color = 'r')
+    ax[0].plot(WS_sorted, EW_pred, 'r')
     ax[0].set_title(f"EW (R² = {monte_result['EW_r2']:.3f})")
 
+    # NS
     ax[1].scatter(WS, NS)
-    ax[1].plot(WS, NS_model.predict(windarray), color = 'r')
+    ax[1].plot(WS_sorted, NS_pred, 'r')
     ax[1].set_title(f"NS (R² = {monte_result['NS_r2']:.3f})")
 
-
+    # Z
     ax[2].scatter(WS, Z)
-    ax[2].plot(WS, Z_model.predict(windarray), color = 'r')
+    ax[2].plot(WS_sorted, Z_pred, 'r')
     ax[2].set_title(f"Z (R² = {monte_result['Z_r2']:.3f})")
 
-
+    # Plot Formatting
     plt.xlabel('Wind Speed (km/hr)')
     for a in ax:
         a.set_ylabel(ylabel)
-    title = 'Wind Speed vs' + ' ' + ylabel
+    title = 'Wind Speed vs' + ' ' + ylabel +f' for {fmin}-{fmax}Hz Band'
     plt.suptitle(title, fontsize = 20)
     plt.tight_layout()
     

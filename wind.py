@@ -1346,7 +1346,7 @@ def plot_statistics(monte_result,
 
     """
     Using the best result from montecarlo_optimal_snr() 
-    or power_wind_monte(),
+    or power_wind_fft(),
     plot wind speed against each channel's power and fit
     the trendline.
 
@@ -1594,14 +1594,49 @@ def load_seis_data(config = None, filename = None, path = None):
 
 def power_wind_fft(wind_speed,
                      wave_dict = None,
-                     use_file = False,
                      fmin = 1,
                      fmax = 49,
-                     seismic_mseed_name=None,
                      config=None,
+                     use_file = False,
+                     seismic_mseed_name=None,
                      csv = False,
                      csv_title = 'results'):
     
+    """
+    Finds the correlation between seismic data and AWS wind speed.
+    Seismic data is trimmed to 30 minute segments which match AWS dataset.
+    The real fast fourier transform is compute for each seismic component and 
+    the power is calculated for each time step. For each frequency band the power
+    is calculated and correlated with AWS data through the mutual time series.
+
+    Parameters:
+        wind_speed (array):
+            An array of wind speed data in format 
+            wind_speed[0] (time), wind_speed[1] (speed array).
+        wave_dict (dict):
+             A wave dictionary containing seismic waveform data.
+        fmin (int):
+            Minimum frequency value for calculating bandwidths.
+        fmax (int):
+            Maximum frequency value for calculating bandwidths.
+        config (dict):
+            Information from a config file containing the local "seismic_data_path".
+        use_file (bool):
+            True/False. True to switch on file checking for mseed file.
+        seismic_mseed_file (str):
+            Title of saved mseed file.
+        csv (bool):
+            True/False. True to save returns as a csv file.
+        csv_title (str):
+            Title of csv file.
+    
+    Returns:
+        best_results (dict):
+            A dictionary containing information about the best correlation result for each station.
+        results (dict):
+            A dictionary containing information about the all the correlaation result for each station.
+    """
+
     # File and Storage
     if use_file == True:
         # Path 

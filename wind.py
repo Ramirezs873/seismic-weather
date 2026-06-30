@@ -1401,7 +1401,7 @@ def plot_statistics(monte_result,
     # Plot Formatting
     plt.xlabel('Wind Speed (km/hr)')
     for a in ax:
-        a.set_ylabel(ylabel)
+        a.set_ylabel(ylabel + ' $m^2s^{-2}$')
     title = 'Wind Speed vs' + ' ' + ylabel +f' for {fmin}-{fmax}Hz Band'
     plt.suptitle(title, fontsize = 20)
     plt.tight_layout()

@@ -15,6 +15,8 @@ from obspy import Stream
 from collections import defaultdict
 from datetime import timedelta
 from obspy import read
+from scipy.fft import fft,fftfreq, rfft, rfftfreq
+
 
 
 
@@ -1404,7 +1406,7 @@ def plot_statistics(monte_result,
     plt.suptitle(title, fontsize = 20)
     plt.tight_layout()
     
-def power_wind_monte(wind_speed,
+def power_wind_freq_filter(wind_speed,
                      wave_dict = None,
                      use_file = False,
                      fmin = 1,
@@ -1414,6 +1416,8 @@ def power_wind_monte(wind_speed,
                      csv = False,
                      csv_title = 'monte_results'):
 
+    # Old method
+    # Very Computationally heavy
     if use_file == True:
         # Path 
         base_path = Path(config["seismic_data_path"]) if config else Path(".")
@@ -1446,9 +1450,12 @@ def power_wind_monte(wind_speed,
         
         station_results = []
 
+        # Or spectrogram?
+        # fft?
         for f1 in range(fmin, fmax):
                 for f2 in range(f1+1, fmax+1):
                     if f1<f2:
+                        # Window Function dependent on fmin?
                         filt = apply_filter({station: wave_dict[station]}, 
                                             filter_type = 'bandpass',
                                             freqmin= f1,
@@ -1458,6 +1465,7 @@ def power_wind_monte(wind_speed,
                         NS_power = []
                         EW_power = []
 
+                        # Take outside frequency loop / remove loop - time index array ?
                         for time in aws_times:
                             t_test = UTC(str(time))
                             trim_wave_dict = select_time(filt, 
@@ -1583,3 +1591,208 @@ def load_seis_data(config = None, filename = None, path = None):
     for tr in stream:
         new_dict[tr.stats.station].append(tr)
     return new_dict
+
+def power_wind_fft(wind_speed,
+                     wave_dict = None,
+                     use_file = False,
+                     fmin = 1,
+                     fmax = 49,
+                     seismic_mseed_name=None,
+                     config=None,
+                     csv = False,
+                     csv_title = 'results'):
+    
+    # File and Storage
+    if use_file == True:
+        # Path 
+        base_path = Path(config["seismic_data_path"]) if config else Path(".")
+        base_path.mkdir(parents=True, exist_ok=True)
+        file_path = (base_path / seismic_mseed_name).with_suffix(".mseed")
+
+        # Read file if it exists
+        if file_path.exists():
+            print(f"Reading existing file: {file_path}")
+            stream = read(str(file_path))
+            wave_dict = defaultdict(list)
+            for tr in stream:
+                wave_dict[tr.stats.station].append(tr)
+        else:
+            print("No File Found")
+
+    else:
+        if wave_dict == None:
+            print('wave_dict not selected. Please input a file or a dictionary. (default: use_file = False )')
+            return None
+    
+    # Setup 
+    station_list = list(wave_dict.keys())
+    aws_times = wind_speed[0]   # timestamps
+    wind_speed_values = wind_speed[1]   # wind speeds
+    WS = np.array(wind_speed_values)
+    results = []
+    all_results = []
+    best_results = []
+
+    # Loop through all stations
+    for station in station_list:
+        
+        # Final Results for each station loop  
+        station_results = []
+        # EW, NS, Z components following real fast fourier transform (RFFT)
+        spectra = []
+
+        # Loop through all time periods
+        for time in aws_times:
+
+            # Matchup AWS & Seismic series. Important for missed AWS measurements.
+            t_test = UTC(str(time))
+            trim_wave_dict = select_time({station: wave_dict[station]}, 
+                                        t_test - timedelta(minutes=30), 
+                                        1800) # Minus 30 minutes as each AWS Timestamp is a past 30 min average 
+            # Organise Streams
+            st = Stream(trim_wave_dict[station])
+
+            # Puts in alphabetical order. 
+            # E, N, Z
+            st.sort(['channel'])   
+
+            EW = st.select(channel="*E")[0].data
+            NS = st.select(channel="*N")[0].data
+            Z  = st.select(channel="*Z")[0].data
+
+            # Compute rfft for each component
+            y_EW = rfft(EW)
+            y_NS = rfft(NS)
+            y_Z = rfft(Z)
+
+            # EW, NS, Z all same length and freq
+            fs = st[0].stats.sampling_rate
+            # Compute rfft frequency
+            freq = rfftfreq(len(EW), 1/fs)
+
+            # Create a mask to remove negative values
+            mask = freq >= 0
+            freq = freq[mask]
+
+            # Calculate power for each component
+            EW_p = np.abs(y_EW[mask])**2
+            NS_p = np.abs(y_NS[mask])**2
+            Z_p = np.abs(y_Z[mask])**2
+
+            # Save spectra as a dictionary
+            spectra.append({'freq': freq,
+                            'EW': EW_p,
+                            'NS': NS_p,
+                            'Z': Z_p,
+                            'len': len(EW)})
+            
+        # Loop through frequency bands for each time index
+        for f1 in range(fmin, fmax):
+                    for f2 in range(f1+1, fmax+1):
+                        if f1<f2:
+
+                            # Setup power 
+                            EW_power = []
+                            NS_power = []
+                            Z_power = []
+
+                            # Loop through spectra at each time index
+                            for spec in spectra:
+                                
+                                # Create bandwidth (f1,f2)
+                                bandwidth = ((spec['freq'] >= f1) & (spec['freq'] < f2))
+
+                                # Calculate power of the bandwidth. Used typical method for fft bands. 
+                                EW_power.append(2*np.sum(spec['EW'][bandwidth]) / spec['len'])
+                                NS_power.append(2*np.sum(spec['NS'][bandwidth]) / spec['len'])
+                                Z_power.append(2*np.sum(spec['Z'][bandwidth]) / spec['len'])
+                            
+                            # Convert to arrays
+                            EW_power = np.array(EW_power)
+                            NS_power = np.array(NS_power)
+                            Z_power = np.array(Z_power)
+
+                            # Remove outliers setup
+                            data = np.column_stack([WS, Z_power, NS_power, EW_power])
+                            mean = np.nanmean(data, axis=0)
+                            std = np.nanstd(data, axis=0)
+
+                            # Avoid dividing by zero
+                            std[std == 0] = 1
+
+                            # Calculate z scores
+                            z_scores = (data - mean) / std
+
+                            # Remove outliers
+                            mask = np.all(np.abs(z_scores) < 3, axis=1)
+                            WS_filt = WS[mask]
+                            Z_filt = Z_power[mask]
+                            NS_filt = NS_power[mask]
+                            EW_filt = EW_power[mask]
+                            
+                            # Reshape for R² analysis
+                            windarray = np.array(WS_filt).reshape(-1, 1)
+                            
+                            # Calculate R² for each component
+                            Z_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(windarray, Z_filt)
+                            Z_r_sq = Z_model.score(windarray, Z_filt)
+                            
+                            NS_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(windarray, NS_filt)
+                            NS_r_sq = NS_model.score(windarray, NS_filt)
+                            
+                            EW_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(windarray, EW_filt)
+                            EW_r_sq = EW_model.score(windarray, EW_filt)
+
+                            # Store results
+                            station_results.append({
+                                'fmin': f1,
+                                'fmax': f2,
+                                'Z_r2': Z_r_sq,
+                                'NS_r2': NS_r_sq,
+                                'EW_r2': EW_r_sq,
+                                'avg_r2': (Z_r_sq + NS_r_sq + EW_r_sq) / 3,
+                                'Z': Z_filt,
+                                'NS': NS_filt,
+                                'EW': EW_filt,
+                                'Z_model': Z_model,
+                                'NS_model': NS_model,
+                                'EW_model': EW_model,
+                                'windarray': windarray
+                            })
+
+                            print(f"Completed Iteration {f1}Hz-{f2}Hz. AVG R Sqaured = {(Z_r_sq + NS_r_sq + EW_r_sq) / 3}")
+        
+        # Find best result
+        best_result = max(station_results, key=lambda x: x['avg_r2'])
+        best_results.append({'station': station, **best_result})
+
+        # Print best result
+        print(f"\nBest frequency range for {station}: {best_result['fmin']} - {best_result['fmax']} Hz")
+        print(f"Z R²: {best_result['Z_r2']:.4f}")
+        print(f"NS R²: {best_result['NS_r2']:.4f}")
+        print(f"EW R²: {best_result['EW_r2']:.4f}")
+        print(f"Average R²: {best_result['avg_r2']:.4f}")
+        results.append(station_results)
+
+        # Save to csv file setup
+        if csv == True:
+            for result in station_results:
+                all_results.append({
+                    'station': station,
+                    'fmin': result['fmin'],
+                    'fmax': result['fmax'],
+                    'Z_r2': result['Z_r2'],
+                    'NS_r2': result['NS_r2'],
+                    'EW_r2': result['EW_r2'],
+                    'avg_r2': result['avg_r2']
+                    })
+                
+    # Save all results to csv file
+    if csv == True:
+        df = pd.DataFrame(all_results)
+        csv_name = f"{csv_title}.csv"
+        df.to_csv(csv_name, index=False)
+        print(f"Results saved to {csv_name}")
+
+
+    return best_results, results

@@ -1831,3 +1831,149 @@ def power_wind_fft(wind_speed,
 
 
     return best_results, results
+
+def AWS_variable(data, 
+                variable='Wind speed in km/h',
+                year=None, 
+                month=None, 
+                day=None,
+                hour=None,
+                plot = True,
+                apply_smooth = False,
+                smoothie = 3):
+
+    """
+    Plots the a chosen variable for a given year and month from the provided DataFrame.
+
+    Parameters:
+    data (pd.DataFrame): 
+        The DataFrame containing the weather station data.
+    variable (str): 
+        The variable to plot. Must be a column heading in the DataFrame.
+    year (int): 
+        The year for plotting (2010-2025 or None for all years).
+    month (int or tuple): 
+        The month(s) for plotting.
+        None for the entire year,
+        A single month (1-12),
+        or a tuple of (start_month, end_month) for a range of months.
+    day (int or tuple): 
+        The day(s) for plotting.
+        None for the entire month,
+        A single day (1-31),
+        or a tuple of (start_day, end_day) for a range of days.
+    hour (int or tuple):
+        The hour(s) for plotting.
+        None for entire day,
+        A single hour (0-23),
+        or a tuple of (start_hour, end_hour) for a range of hours.
+    apply_smooth (bool): 
+        True/False. Applying ObsPy smooth() function.
+    smoothie (int):
+        Number of values to calculate moving average for smoothing.
+    """
+    
+    # Check if time inputs are single valued or a range.
+    # Year
+    if isinstance(year, (tuple, list)) and len(year) == 2: 
+        start_year, end_year = year 
+        df_slice = data[(data['datetime'].dt.year >= start_year) & 
+                        (data['datetime'].dt.year <= end_year) ].copy()
+    elif year is None or year < 2010 or year > 2025:
+        df_slice = data.copy()
+    else:
+        df_slice = data[data['datetime'].dt.year == year].copy()
+    # Month
+    if isinstance(month, (tuple, list)) and len(month) == 2: 
+        start_month, end_month = month 
+        df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                        (df_slice['datetime'].dt.month <= end_month) ].copy()
+    elif isinstance(month, int): 
+        df_slice = df_slice[df_slice['datetime'].dt.month == month].copy()
+    # Day
+    if isinstance(day, (tuple, list)) and len(day) == 2:
+        start_day, end_day = day
+        df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
+                            (df_slice['datetime'].dt.day <= end_day)].copy()
+    elif isinstance(day, int):
+        df_slice = df_slice[df_slice['datetime'].dt.day == day].copy()
+    # Hour
+    if isinstance(hour, (tuple, list)) and len(hour) == 2:
+        start_hour, end_hour = hour
+        df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                            (df_slice['datetime'].dt.hour <= end_hour)].copy()
+    elif isinstance(hour, int):
+        df_slice = df_slice[df_slice['datetime'].dt.hour == hour].copy()
+    
+    # Check if there is data
+    if df_slice.empty: 
+        print("No data available for the selected time period.") 
+        return
+
+    # Check if variable exists in the DataFrame
+    if variable not in df_slice.columns:
+        print(f"Variable '{variable}' not found in the DataFrame.")
+        return
+    
+    # Convert to numeric
+    df_slice[variable] = pd.to_numeric(df_slice[variable], errors='coerce')
+    var = df_slice[variable]
+
+    # Normalisation
+    # df_slice['Wind_norm'] = wind_speed / wind_speed.max()
+
+    # Smoothing
+    if apply_smooth == True:
+        var = smooth(var.to_numpy(), smoothie)
+    else:
+        var = var.to_numpy()
+
+    # Clean Data
+    valid_mask = ~np.isnan(var)
+
+    var = var[valid_mask]
+    time = df_slice['datetime'].to_numpy()[valid_mask]
+
+    if plot == True:
+        
+        # Create Figure 
+        plt.figure(figsize=(15,6))
+
+        # Plot
+        plt.plot(time, var, 
+                color='black', linewidth=0.5)
+        
+        # Title construction
+        title = f"{variable} at Station {df_slice['Station Number'].iloc[0]} for "
+        # Year
+        if isinstance(year, (tuple, list)):
+            title += f"{year[0]} to {year[1]}"
+        elif year is None:
+            title += "All Years"
+        else:
+            title += f"{year}"
+        # Month
+        if isinstance(month, (tuple, list)):
+            title += f", Months:{month[0]} to {month[1]}"
+        elif isinstance(month, int):
+            title += f", Month:{month}"
+        # Day
+        if isinstance(day, (tuple, list)):
+            title += f", Days:{day[0]} to {day[1]}"
+        elif isinstance(day, int):
+            title += f", Day:{day}"
+        # Hour
+        if isinstance(hour, (tuple, list)):
+            title += f", Hours:{hour[0]} to {hour[1]}"
+        elif isinstance(hour, int):
+            title += f", Hour:{hour}"
+        plt.title(title)
+
+        # Plot Formating
+        plt.ylabel(f'{variable}')
+        plt.xlabel('Time')
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+
+    return time, var

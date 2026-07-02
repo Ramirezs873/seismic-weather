@@ -1977,3 +1977,124 @@ def AWS_variable(data,
         plt.show()
 
     return time, var
+
+def spectra_fft(wind_speed,
+                wave_dict = None,
+                config=None,
+                use_file = False,
+                seismic_mseed_name=None):
+
+    """
+    Finds the correlation between seismic data and AWS wind speed.
+    Seismic data is trimmed to 30 minute segments which match AWS dataset.
+    The real fast fourier transform is compute for each seismic component and 
+    the power is calculated for each time step. For each frequency band the power
+    is calculated and correlated with AWS data through the mutual time series.
+
+    Parameters:
+        wind_speed (array):
+            An array of wind speed data in format 
+            wind_speed[0] (time), wind_speed[1] (speed array).
+        wave_dict (dict):
+             A wave dictionary containing seismic waveform data.
+        config (dict):
+            Information from a config file containing the local "seismic_data_path".
+        use_file (bool):
+            True/False. True to switch on file checking for mseed file.
+        seismic_mseed_file (str):
+            Title of saved mseed file.
+    
+    Returns:
+       all_spectra (list):
+            A list of dictionaries containing the frequency and power 
+            for each component (EW, NS, Z) for each station and time period.
+    """
+
+    # File and Storage
+    if use_file == True:
+        # Path 
+        base_path = Path(config["seismic_data_path"]) if config else Path(".")
+        base_path.mkdir(parents=True, exist_ok=True)
+        file_path = (base_path / seismic_mseed_name).with_suffix(".mseed")
+
+        # Read file if it exists
+        if file_path.exists():
+            print(f"Reading existing file: {file_path}")
+            stream = read(str(file_path))
+            wave_dict = defaultdict(list)
+            for tr in stream:
+                wave_dict[tr.stats.station].append(tr)
+        else:
+            print("No File Found")
+
+    else:
+        if wave_dict == None:
+            print('wave_dict not selected. Please input a file or a dictionary. (default: use_file = False )')
+            return None
+    
+    # Setup 
+    station_list = list(wave_dict.keys())
+    aws_times = wind_speed[0]   # timestamps
+    # EW, NS, Z components following real fast fourier transform (RFFT)
+    all_spectra = []
+
+    # Loop through all stations
+    for station in station_list:
+        
+        spectra = []
+
+        # Iteration value for time period.
+        i = 1
+        
+        # Loop through all time periods
+        for time in aws_times:
+
+            # Matchup AWS & Seismic series. Important for missed AWS measurements.
+            t_test = UTC(str(time))
+            trim_wave_dict = select_time({station: wave_dict[station]}, 
+                                        t_test - timedelta(minutes=30), 
+                                        1800) # Minus 30 minutes as each AWS Timestamp is a past 30 min average 
+            # Organise Streams
+            st = Stream(trim_wave_dict[station])
+
+            # Puts in alphabetical order. 
+            # E, N, Z
+            st.sort(['channel'])   
+
+            EW = st.select(channel="*E")[0].data
+            NS = st.select(channel="*N")[0].data
+            Z  = st.select(channel="*Z")[0].data
+
+            # Compute rfft for each component
+            y_EW = rfft(EW)
+            y_NS = rfft(NS)
+            y_Z = rfft(Z)
+
+            # EW, NS, Z all same length and freq
+            fs = st[0].stats.sampling_rate
+            # Compute rfft frequency
+            freq = rfftfreq(len(EW), 1/fs)
+
+            # Create a mask to remove negative values
+            mask = freq >= 0
+            freq = freq[mask]
+
+            # Calculate power for each component
+            EW_p = np.abs(y_EW[mask])**2
+            NS_p = np.abs(y_NS[mask])**2
+            Z_p = np.abs(y_Z[mask])**2
+
+            # Save spectra as a dictionary
+            spectra.append({'freq': freq,
+                            'EW': EW_p,
+                            'NS': NS_p,
+                            'Z': Z_p,
+                            'time' : time,
+                            't_index': i,
+                            'len': len(EW)})
+            i += 1
+
+    all_spectra.append({station: spectra})
+
+    return all_spectra
+        

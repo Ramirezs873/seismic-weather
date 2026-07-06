@@ -1982,7 +1982,8 @@ def spectra_fft(wind_speed,
                 wave_dict = None,
                 config=None,
                 use_file = False,
-                seismic_mseed_name=None):
+                seismic_mseed_name=None, 
+                pad_value=np.nan):
 
     """
     Finds the correlation between seismic data and AWS wind speed.
@@ -2003,7 +2004,9 @@ def spectra_fft(wind_speed,
             True/False. True to switch on file checking for mseed file.
         seismic_mseed_file (str):
             Title of saved mseed file.
-    
+        pad_value (float):
+            Value to use for padding.
+
     Returns:
        all_spectra (list):
             A list of dictionaries containing the frequency and power 
@@ -2043,58 +2046,82 @@ def spectra_fft(wind_speed,
         
         spectra = []
 
-        # Iteration value for time period.
-        i = 1
-        
+        # Organise Streams
+        st = Stream(wave_dict[station])
+
+        # Puts in alphabetical order. 
+        # E, N, Z
+        st.sort(['channel'])   
+
+        EW = st.select(channel="*E")[0].data
+        NS = st.select(channel="*N")[0].data
+        Z  = st.select(channel="*Z")[0].data
+
+        # EW, NS, Z all same length and freq
+        fs = st[0].stats.sampling_rate
+        start_time = st[0].stats.starttime
+
+        window_length = int(30 * 60 * fs)
+
+        start_i = []
+
         # Loop through all time periods
         for time in aws_times:
+            
+            t0 = UTC(str(time)) - timedelta(minutes=30)
+            idx = int((t0 - start_time) * fs)
+            start_i.append(idx)
+        
+        start_i = np.array(start_i)
+        
+        n_starts = start_i.shape[0]
+        EW_out = np.full((n_starts, window_length), pad_value, dtype=EW.dtype) 
+        NS_out = np.full((n_starts, window_length), pad_value, dtype=NS.dtype) 
+        Z_out = np.full((n_starts, window_length), pad_value, dtype=Z.dtype) 
 
-            # Matchup AWS & Seismic series. Important for missed AWS measurements.
-            t_test = UTC(str(time))
-            trim_wave_dict = select_time({station: wave_dict[station]}, 
-                                        t_test - timedelta(minutes=30), 
-                                        1800) # Minus 30 minutes as each AWS Timestamp is a past 30 min average 
-            # Organise Streams
-            st = Stream(trim_wave_dict[station])
+        offsets = np.arange(window_length)
+        index = start_i[:, None] + offsets[None, :]
 
-            # Puts in alphabetical order. 
-            # E, N, Z
-            st.sort(['channel'])   
+        EW_in_bounds = (index >= 0) & (index < EW.shape[0])
+        NS_in_bounds = (index >= 0) & (index < NS.shape[0])
+        Z_in_bounds = (index >= 0) & (index < Z.shape[0])
 
-            EW = st.select(channel="*E")[0].data
-            NS = st.select(channel="*N")[0].data
-            Z  = st.select(channel="*Z")[0].data
+        EW_flat_idx = index[EW_in_bounds]
+        NS_flat_idx = index[NS_in_bounds]
+        Z_flat_idx = index[Z_in_bounds]
 
-            # Compute rfft for each component
-            y_EW = rfft(EW)
-            y_NS = rfft(NS)
-            y_Z = rfft(Z)
+        EW_out[EW_in_bounds] = EW[EW_flat_idx]
+        NS_out[NS_in_bounds] = NS[NS_flat_idx]
+        Z_out[Z_in_bounds] = Z[Z_flat_idx]
 
-            # EW, NS, Z all same length and freq
-            fs = st[0].stats.sampling_rate
-            # Compute rfft frequency
-            freq = rfftfreq(len(EW), 1/fs)
 
-            # Create a mask to remove negative values
-            mask = freq >= 0
-            freq = freq[mask]
 
-            # Calculate power for each component
-            EW_p = np.abs(y_EW[mask])**2
-            NS_p = np.abs(y_NS[mask])**2
-            Z_p = np.abs(y_Z[mask])**2
+        # Compute rfft for each component
+        y_EW = rfft(EW_out, axis = 1)
+        y_NS = rfft(NS_out, axis = 1)
+        y_Z = rfft(Z_out, axis = 1)
 
-            # Save spectra as a dictionary
-            spectra.append({'freq': freq,
-                            'EW': EW_p,
-                            'NS': NS_p,
-                            'Z': Z_p,
-                            'time' : time,
-                            't_index': i,
-                            'len': len(EW)})
-            i += 1
+        
+        # Compute rfft frequency
+        freq = rfftfreq(window_length, 1/fs)
 
-    all_spectra.append({station: spectra})
+        # Create a mask to remove negative values
+        #mask = freq >= 0
+        #freq = freq[mask]
+
+        # Calculate power for each component
+        EW_p = np.abs(y_EW)**2
+        NS_p = np.abs(y_NS)**2
+        Z_p = np.abs(y_Z)**2
+
+        # Save spectra as a dictionary
+        spectra.append({'freq': freq,
+                        'EW': EW_p,
+                        'NS': NS_p,
+                        'Z': Z_p,
+                        'time' : aws_times})
+
+        all_spectra.append({station: spectra})
 
     return all_spectra
         

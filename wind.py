@@ -1975,7 +1975,7 @@ def AWS_variable(data,
 
     return time, var
 
-def spectra_fft(wind_speed,
+def spectra_fft(aws_variable,
                 wave_dict = None,
                 config=None,
                 use_file = False,
@@ -1983,16 +1983,16 @@ def spectra_fft(wind_speed,
                 pad_value=np.nan):
 
     """
-    Finds the correlation between seismic data and AWS wind speed.
+    Finds the correlation between seismic data and an AWS variable.
     Seismic data is trimmed to 30 minute segments which match AWS dataset.
     The real fast fourier transform is compute for each seismic component and 
     the power is calculated for each time step. For each frequency band the power
     is calculated and correlated with AWS data through the mutual time series.
 
     Parameters:
-        wind_speed (array):
-            An array of wind speed data in format 
-            wind_speed[0] (time), wind_speed[1] (speed array).
+        aws_variable (array):
+            An array of AWS data in format 
+            aws_variable[0] (time), aws_variable[1] (variable array).
         wave_dict (dict):
              A wave dictionary containing seismic waveform data.
         config (dict):
@@ -2034,7 +2034,7 @@ def spectra_fft(wind_speed,
     
     # Setup 
     station_list = list(wave_dict.keys())
-    aws_times = wind_speed[0]   # timestamps
+    aws_times = aws_variable[0]   # timestamps
     # EW, NS, Z components following real fast fourier transform (RFFT)
     all_spectra = []
 
@@ -2114,21 +2114,19 @@ def spectra_fft(wind_speed,
                         'NS': NS_p,
                         'Z': Z_p,
                         'time' : aws_times,
-                        'wind_speed' : wind_speed})
+                        'aws_values' : aws_variable[1]})
 
         all_spectra.append({station: spectra})
        
     return all_spectra
         
 def seis_aws_fft_cor(spectra,
-                    aws_variable,
                     fmin = 1,
                     fmax = 49,
                     csv = False,
                     csv_title = 'results'):
     
         
-    aws_values = aws_variable[1]
     results = []
     all_results = []
     best_results = []
@@ -2138,14 +2136,15 @@ def seis_aws_fft_cor(spectra,
 
         EW_power = station_dict[station][0]['EW']
         NS_power = station_dict[station][0]['NS']
-        Z_power  = station_dict[station][0]['Z']
-        freq     = station_dict[station][0]['freq']
+        Z_power = station_dict[station][0]['Z']
+        freq = station_dict[station][0]['freq']
+        aws_values = station_dict[station][0]['aws_values']
 
         valid = ~np.any(np.isnan(EW_power), axis=1)
-        EW_spec = EW_power[valid]
-        NS_spec = NS_power[valid]
-        Z_spec = Z_power[valid]
-        wind_speed = np.asarray(aws_values)[valid]
+        EW_valid = EW_power[valid]
+        NS_valid = NS_power[valid]
+        Z_valid = Z_power[valid]
+        aws_valid = np.asarray(aws_values)[valid]
 
         station_results = []
 
@@ -2155,12 +2154,12 @@ def seis_aws_fft_cor(spectra,
 
                 band_width = (freq >= f1) & (freq <= f2)
 
-                EW_band_power = np.mean(EW_spec[:, band_width], axis=1)
-                NS_band_power = np.mean(NS_spec[:, band_width], axis=1)
-                Z_band_power = np.mean(Z_spec[:, band_width], axis=1)
+                EW_band_power = np.mean(EW_valid[:, band_width], axis=1)
+                NS_band_power = np.mean(NS_valid[:, band_width], axis=1)
+                Z_band_power = np.mean(Z_valid[:, band_width], axis=1)
 
                 # Remove outliers setup
-                data = np.column_stack([wind_speed, Z_band_power, NS_band_power, EW_band_power])
+                data = np.column_stack([aws_valid, Z_band_power, NS_band_power, EW_band_power])
                 mean = np.nanmean(data, axis=0)
                 std = np.nanstd(data, axis=0)
 
@@ -2172,23 +2171,23 @@ def seis_aws_fft_cor(spectra,
 
                 # Remove outliers
                 mask = np.all(np.abs(z_scores) < 3, axis=1)
-                WS = wind_speed[mask]
+                aws_mask = aws_valid[mask]
                 Z_mask = Z_band_power[mask]
                 NS_mask = NS_band_power[mask]
                 EW_mask = EW_band_power[mask]
                 
                 # Reshape for R² analysis
-                windarray = np.array(WS).reshape(-1, 1)
+                aws_array = np.array(aws_mask).reshape(-1, 1)
                 
                 # Calculate R² for each component
-                Z_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(windarray, Z_mask)
-                Z_r_sq = Z_model.score(windarray, Z_mask)
+                Z_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(aws_array, Z_mask)
+                Z_r_sq = Z_model.score(aws_array, Z_mask)
                 
-                NS_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(windarray, NS_mask)
-                NS_r_sq = NS_model.score(windarray, NS_mask)
+                NS_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(aws_array, NS_mask)
+                NS_r_sq = NS_model.score(aws_array, NS_mask)
                 
-                EW_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(windarray, EW_mask)
-                EW_r_sq = EW_model.score(windarray, EW_mask)
+                EW_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(aws_array, EW_mask)
+                EW_r_sq = EW_model.score(aws_array, EW_mask)
 
                 # Store results
                 station_results.append({
@@ -2204,7 +2203,7 @@ def seis_aws_fft_cor(spectra,
                     'Z_model': Z_model,
                     'NS_model': NS_model,
                     'EW_model': EW_model,
-                    'windarray': windarray
+                    'aws_array': aws_array
                 })
 
                 print(f"Completed Iteration {f1}Hz-{f2}Hz. AVG R Sqaured = {(Z_r_sq + NS_r_sq + EW_r_sq) / 3}")

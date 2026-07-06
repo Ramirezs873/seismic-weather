@@ -1339,18 +1339,16 @@ def find_channel(stream, options):
     return None 
 
 def plot_statistics(monte_result,
-                    ylabel = 'SNR (dB)'):
+                    ylabel = 'Power'):
 
     """
-    Using the best result from montecarlo_optimal_snr() 
-    or power_wind_fft(),
+    Using the best result from seis_aws_fft_cor(),
     plot wind speed against each channel's power and fit
     the trendline.
 
     Parameters:
         monte_result (dict):
-            The output of montecarlo_optimal_snr
-            or power_wind_monte().
+            The output of seis_aws_fft_cor().
         ylabel (str):
             Y label and adjusts suptitle. 
             Change to power if using power_wind_monte() output.
@@ -1361,8 +1359,8 @@ def plot_statistics(monte_result,
     EW_model = monte_result['EW_model']
     Z_model = monte_result['Z_model']
 
-    windarray = monte_result['windarray']
-    WS = np.array(monte_result['windarray'].reshape(-1))
+    windarray = monte_result['aws_array']
+    WS = np.array(monte_result['aws_array'].reshape(-1))
     NS = monte_result['NS']
     EW = monte_result['EW']
     Z = monte_result['Z']
@@ -2125,6 +2123,28 @@ def seis_aws_fft_cor(spectra,
                     fmax = 49,
                     csv = False,
                     csv_title = 'results'):
+    """
+    Finds the correlation between seismic data and AWS wind speed.
+
+    Parameters:
+        spectra (list):
+            A list of dictionaries containing the frequency and power 
+            for each seismic component (EW, NS, Z) for each station and time period.
+        fmin (int):
+            Minimum frequency value for calculating the power of each bandwidths.
+        fmax (int):
+            Maximum frequency value for calculating the power of each  bandwidths.
+        csv (bool):
+            True/False. True to save returns as a csv file.
+        csv_title (str):
+            Title for the output csv file.
+
+    Outputs:
+        best_results (list):
+            A list of dictionaries containing information about the best correlation result for each station.
+        results (list):
+            A list of dictionaries containing information about all the correlation results for each station.
+    """
     
         
     results = []

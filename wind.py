@@ -2057,6 +2057,7 @@ def spectra_fft(aws_variable,
         start_time = st[0].stats.starttime
 
         window_length = int(30 * 60 * fs)
+        # Define Window Function    
 
         start_i = []
 
@@ -2089,11 +2090,26 @@ def spectra_fft(aws_variable,
         NS_out[NS_in_bounds] = NS[NS_flat_idx]
         Z_out[Z_in_bounds] = Z[Z_flat_idx]
 
+        if (np.isnan(EW_out).any() or np.isnan(NS_out).any() or np.isnan(Z_out).any()):
+            print('Error: Seismic data needs to span at least 30 minutes before AWS start time up until the final AWS time stamp.')
+            return None
+
+        # Apply Hann Window to each Out
+        taper_length = int(0.02 * window_length)
+        window = np.ones(window_length)
+        hann = np.hanning(2 * taper_length)
+        window[:taper_length] = hann[:taper_length]
+        window[-taper_length:] = hann[taper_length:]
+
+        EW_win = EW_out * window[None, :]
+        NS_win = NS_out * window[None, :]
+        Z_win = Z_out * window[None, :]
+
         # Compute rfft for each component
-        y_EW = rfft(EW_out, axis = 1)
-        y_NS = rfft(NS_out, axis = 1)
-        y_Z = rfft(Z_out, axis = 1)
-        
+        y_EW = rfft(EW_win, axis = 1)
+        y_NS = rfft(NS_win, axis = 1)
+        y_Z = rfft(Z_win, axis = 1)
+    
         # Compute rfft frequency
         freq = rfftfreq(window_length, 1/fs)
 

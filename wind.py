@@ -1999,6 +1999,8 @@ def spectra_fft(aws_variable,
             True/False. True to switch on file checking for mseed file.
         seismic_mseed_file (str):
             Title of saved mseed file.
+            Seismic data must begin atleast 30 minutes before the first AWS timestamp
+            and end anytime after the final AWS timestamp.
         pad_value (float):
             Value to use for padding.
 
@@ -2056,51 +2058,66 @@ def spectra_fft(aws_variable,
         fs = st[0].stats.sampling_rate
         start_time = st[0].stats.starttime
 
+        # Define Window Length Dependent on AWS
+        # 30 Min (times 60 sec) AWS Measurement window
+        # times seismic sampling rate
         window_length = int(30 * 60 * fs)
-        # Define Window Function    
 
+        # Setup time index list
         start_i = []
 
         # Loop through all time periods
         for time in aws_times:
             
+            # 30 min collection time before AWS measurement
             t0 = UTC(str(time)) - timedelta(minutes=30)
+            # Define index
             idx = int((t0 - start_time) * fs)
             start_i.append(idx)
         
+        # Convert to np array
         start_i = np.array(start_i)
-        
+        # Define n
         n_starts = start_i.shape[0]
+
+        # Setup Output Arrays
         EW_out = np.full((n_starts, window_length), pad_value, dtype=EW.dtype) 
         NS_out = np.full((n_starts, window_length), pad_value, dtype=NS.dtype) 
         Z_out = np.full((n_starts, window_length), pad_value, dtype=Z.dtype) 
 
+        # Define the offsets
         offsets = np.arange(window_length)
+
+        # Define the seismic index based on the offsets
         index = start_i[:, None] + offsets[None, :]
 
+        # Check if data exists within the index bounds
         EW_in_bounds = (index >= 0) & (index < EW.shape[0])
         NS_in_bounds = (index >= 0) & (index < NS.shape[0])
         Z_in_bounds = (index >= 0) & (index < Z.shape[0])
 
+        # Define the valid indicies
         EW_flat_idx = index[EW_in_bounds]
         NS_flat_idx = index[NS_in_bounds]
         Z_flat_idx = index[Z_in_bounds]
 
+        # Place the balid indicies into the output arrays
         EW_out[EW_in_bounds] = EW[EW_flat_idx]
         NS_out[NS_in_bounds] = NS[NS_flat_idx]
         Z_out[Z_in_bounds] = Z[Z_flat_idx]
 
+        # Stop if seismic data doesn't line up
         if (np.isnan(EW_out).any() or np.isnan(NS_out).any() or np.isnan(Z_out).any()):
             print('Error: Seismic data needs to span at least 30 minutes before AWS start time up until the final AWS time stamp.')
             return None
 
-        # Apply Hann Window to each Out
-        taper_length = int(0.02 * window_length)
-        window = np.ones(window_length)
-        hann = np.hanning(2 * taper_length)
-        window[:taper_length] = hann[:taper_length]
-        window[-taper_length:] = hann[taper_length:]
-
+        # Apply Hann Window 
+        taper_length = int(0.02 * window_length) # 2% taper
+        window = np.ones(window_length) # Establish uniform window
+        hann = np.hanning(2 * taper_length) # Create hann window for both (2) sides of data
+        window[:taper_length] = hann[:taper_length] # Apply 2% to first half
+        window[-taper_length:] = hann[taper_length:] # Apply 2% to second half
+        # Apply
         EW_win = EW_out * window[None, :]
         NS_win = NS_out * window[None, :]
         Z_win = Z_out * window[None, :]
@@ -2112,10 +2129,6 @@ def spectra_fft(aws_variable,
     
         # Compute rfft frequency
         freq = rfftfreq(window_length, 1/fs)
-
-        # Create a mask to remove negative values
-        #mask = freq >= 0
-        #freq = freq[mask]
 
         # Calculate power for each component
         EW_p = np.abs(y_EW)**2

@@ -18,7 +18,7 @@ from obspy import read
 from scipy.fft import fft,fftfreq, rfft, rfftfreq
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, r2_score
 
 
 def read_data(path, 
@@ -2304,104 +2304,117 @@ def seis_aws_rf(spectra,
                 csv = False,
                 csv_title = 'results'):
     
+    """
+    Finds the correlation between seismic data and AWS wind speed.
+
+    Parameters:
+        spectra (list):
+            A list of dictionaries containing the frequency, power, and aws data 
+            for each seismic component (EW, NS, Z) for each station and time period.
+        fmin (int):
+            Minimum frequency value for calculating the power of each bandwidths.
+        fmax (int):
+            Maximum frequency value for calculating the power of each  bandwidths.
+        csv (bool):
+            True/False. True to save returns as a csv file.
+        csv_title (str):
+            Title for the output csv file.
+
+    Outputs:
+        best_r_results (list):
+            A list of dictionaries containing information about the best (max) r2 correlation result for each station.
+        best_rmse_results (list):
+            A list of dictionaries containing information about the best (min) rmse correlation result for each station.
+        results (list):
+            A list of dictionaries containing information about all the correlation results for each station.
+    """
+    
+    # Setup Result Lists
     results = []
     all_results = []
     best_r_results = []
     best_rmse_results = []
 
-    for station_dict in spectra:
-        station = list(station_dict.keys())[0]
+    # Create Bandwidths
+    bands = []
+    for f1 in range(fmin, fmax):
+        for f2 in range(f1+1, fmax+1):
+            band = (f1, f2)
+            bands.append(band)
 
+    # Loop through stations
+    for station_dict in spectra:
+
+        # Setup Variables
+        station = list(station_dict.keys())[0] 
         EW_power = station_dict[station][0]['EW']
         NS_power = station_dict[station][0]['NS']
         Z_power = station_dict[station][0]['Z']
         freq = station_dict[station][0]['freq']
         aws_values = station_dict[station][0]['aws_values']
 
+        # Clean data (may not be required anymore, idk)
         valid = ~np.any(np.isnan(EW_power), axis=1)
         EW_valid = EW_power[valid]
         NS_valid = NS_power[valid]
         Z_valid = Z_power[valid]
         aws_valid = np.asarray(aws_values)[valid]
 
+        # Setup results
         station_results = []
 
+        # Apply bandwidths to data
+        for i, (f1,f2) in enumerate(bands):
+            band_width = (freq >= f1) & (freq < f2)
 
-        for f1 in range(fmin, fmax):
-            for f2 in range(f1+1, fmax+1):
+            # Convert to log to better inspect power scales and apply bandwidth
+            Z_log = np.log10(Z_valid[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
+            NS_log = np.log10(NS_valid[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
+            EW_log = np.log10(EW_valid[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
+     
+            # Train Model
+            Z_X_train, Z_X_test, Z_y_train, Z_y_test = train_test_split(Z_log, aws_valid, test_size=0.2,random_state = 42)
+            NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(NS_log, aws_valid, test_size=0.2,random_state = 42)
+            EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_valid, test_size=0.2,random_state = 42)
 
-                band_width = (freq >= f1) & (freq < f2)
+            # Define Random Forest Model
+            Z_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+            NS_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+            EW_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
 
-                EW_band_power = np.mean(EW_valid[:, band_width], axis=1)
-                NS_band_power = np.mean(NS_valid[:, band_width], axis=1)
-                Z_band_power = np.mean(Z_valid[:, band_width], axis=1)
+            # Fit Model
+            Z_model.fit(Z_X_train, Z_y_train)
+            NS_model.fit(NS_X_train, NS_y_train)
+            EW_model.fit(EW_X_train, EW_y_train)
 
-                # Remove outliers setup
-                data = np.column_stack([aws_valid, Z_band_power, NS_band_power, EW_band_power])
-                mean = np.nanmean(data, axis=0)
-                std = np.nanstd(data, axis=0)
+            # Predictions
+            Z_pred = Z_model.predict(Z_X_test)
+            NS_pred = NS_model.predict(NS_X_test)
+            EW_pred = EW_model.predict(EW_X_test)
 
-                # Avoid dividing by zero
-                std[std == 0] = 1
+            # rmse
+            Z_rmse = np.sqrt(mean_squared_error(Z_y_test,Z_pred))
+            NS_rmse = np.sqrt(mean_squared_error(NS_y_test,NS_pred))
+            EW_rmse = np.sqrt(mean_squared_error(EW_y_test,EW_pred))
 
-                # Calculate z scores
-                z_scores = (data - mean) / std
-
-                # Remove outliers
-                mask = np.all(np.abs(z_scores) < 3, axis=1)
-                aws_mask = aws_valid[mask]
-                Z_mask = Z_band_power[mask]
-                NS_mask = NS_band_power[mask]
-                EW_mask = EW_band_power[mask]
-
-                # Conver to log
-                Z_log = np.log10(Z_mask + 1e-20).reshape(-1, 1)
-                NS_log = np.log10(NS_mask + 1e-20).reshape(-1, 1)
-                EW_log = np.log10(EW_mask + 1e-20).reshape(-1, 1)
+            # R2
+            Z_r = r2_score(Z_y_test, Z_pred)
+            NS_r = r2_score(NS_y_test, NS_pred)
+            EW_r = r2_score(EW_y_test, EW_pred)
             
-                # Train Model
-                Z_X_train, Z_X_test, Z_y_train, Z_y_test = train_test_split(Z_log, aws_mask, test_size=0.2,random_state = 42)
-                NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(NS_log, aws_mask, test_size=0.2,random_state = 42)
-                EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_mask, test_size=0.2,random_state = 42)
-
-                # Define Random Forest Model
-                Z_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-                NS_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-                EW_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-
-                # Fit Model
-                Z_model.fit(Z_X_train, Z_y_train)
-                NS_model.fit(NS_X_train, NS_y_train)
-                EW_model.fit(EW_X_train, EW_y_train)
-
-                # Predictions
-                Z_pred = Z_model.predict(Z_X_test)
-                NS_pred = NS_model.predict(NS_X_test)
-                EW_pred = EW_model.predict(EW_X_test)
-
-                # rmse
-                Z_rmse = np.sqrt(mean_squared_error(Z_y_test,Z_pred))
-                NS_rmse = np.sqrt(mean_squared_error(NS_y_test,NS_pred))
-                EW_rmse = np.sqrt(mean_squared_error(EW_y_test,EW_pred))
-
-                # R2
-                Z_r = (np.corrcoef(Z_log[:,0], aws_mask)[0,1])**2
-                NS_r = (np.corrcoef(NS_log[:,0], aws_mask)[0,1])**2
-                EW_r = (np.corrcoef(EW_log[:,0], aws_mask)[0,1])**2
-                
-                # Store results
-                station_results.append({
-                    'fmin': f1,
-                    'fmax': f2,
-                    'Z_r2': Z_r,
-                    'NS_r2': NS_r,
-                    'EW_r2': EW_r,
-                    'avg_r2': (Z_r + NS_r + EW_r) / 3,
-                    'Z_rmse': Z_rmse,
-                    'NS_rmse': NS_rmse,
-                    'EW_rmse': EW_rmse,
-                    'avg_rmse': (Z_rmse +NS_rmse + EW_rmse) / 3})
-       
+            # Store results
+            station_results.append({
+                'fmin': f1,
+                'fmax': f2,
+                'Z_r2': Z_r,
+                'NS_r2': NS_r,
+                'EW_r2': EW_r,
+                'avg_r2': (Z_r + NS_r + EW_r) / 3,
+                'Z_rmse': Z_rmse,
+                'NS_rmse': NS_rmse,
+                'EW_rmse': EW_rmse,
+                'avg_rmse': (Z_rmse + NS_rmse + EW_rmse) / 3})
+        
         # Find best result
         # R²
         best_r_result = max(station_results, key=lambda x: x['avg_r2'])
@@ -2409,7 +2422,7 @@ def seis_aws_rf(spectra,
         # rmse
         best_rmse_result = min(station_results, key=lambda x: x['avg_rmse'])
         best_rmse_results.append({'station': station, **best_rmse_result})
-       
+    
         # Print best result
         # R²
         print(f"\nBest R² value frequency range for {station}: {best_r_result['fmin']} - {best_r_result['fmax']} Hz")

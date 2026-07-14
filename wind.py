@@ -2305,7 +2305,8 @@ def seis_aws_rf(spectra,
                 csv_title = 'results',
                 plot_best = True,
                 plot_title = None,
-                variable_units = None):
+                variable_units = None,
+                plot_stat_results = True):
     
     """
     Finds the correlation between seismic data and AWS wind speed.
@@ -2357,7 +2358,10 @@ def seis_aws_rf(spectra,
         aws_values = station_dict[station][0]['aws_values']
 
         # Clean data (may not be required anymore, idk)
-        valid = ~np.any(np.isnan(EW_power), axis=1)
+        valid = (~np.any(np.isnan(EW_power), axis=1)
+                & ~np.any(np.isnan(NS_power), axis=1)
+                & ~np.any(np.isnan(Z_power), axis=1))
+
         EW_valid = EW_power[valid]
         NS_valid = NS_power[valid]
         Z_valid = Z_power[valid]
@@ -2448,22 +2452,60 @@ def seis_aws_rf(spectra,
         
         results.append(station_results)
 
-        if plot_best == True:
+        # Plot all average R² and rmse results against centre frequency
+        if plot_stat_results ==True:
+            band_centres = []
+            r2_list = []
+            rmse_list = []
+            for r in station_results:
+                band_centre = [(r['fmin'] + r['fmax'])/2]
+                r2 = r['avg_r2']
+                rmse = r['avg_rmse']
+                band_centres.append(band_centre)
+                r2_list.append(r2)
+                rmse_list.append(rmse)
 
-            fig, axs = plt.subplots(3, 2, figsize=(12, 12))
+            fig, axs = plt.subplots(1,2, figsize=(8,4))
+            # R²
+            axs[0].scatter(band_centres, r2_list)
+            axs[0].set_title(f'{station}: Band Centre Frequency vs Average R²')
+            axs[0].set_xlabel('Band Centre Frequency (Hz)')
+            axs[0].set_ylabel('Average R²')
+            # rmse
+            axs[1].scatter(band_centres, rmse_list)
+            axs[1].set_title(f'{station}: Band Centre Frequency vs Average rmse')
+            axs[1].set_xlabel('Band Centre Frequency (Hz)')
+            axs[1].set_ylabel('rmse')
+
+        # Plot the best R² and rmse results for each station channel
+        if plot_best == True:
+            
+            fig, axs = plt.subplots(3, 2, figsize=(10, 10))
             # R²
             axs[0,0].scatter(best_r_result['Z_y_test'],best_r_result['Z_pred'], marker='x')
+            lims = [min(axs[0,0].get_xlim()[0], axs[0,0].get_ylim()[0]), max(axs[0,0].get_xlim()[1], axs[0,0].get_ylim()[1])]
+            axs[0,0].plot(lims, lims, 'r--')
             axs[0,0].set_title(f"Best R² Z: {best_r_result['Z_r2']:.4f}")
             axs[1,0].scatter(best_r_result['NS_y_test'],best_r_result['NS_pred'], marker='x')
+            lims = [min(axs[1,0].get_xlim()[0], axs[1,0].get_ylim()[0]), max(axs[1,0].get_xlim()[1], axs[1,0].get_ylim()[1])]
+            axs[1,0].plot(lims, lims, 'r--')
             axs[1,0].set_title(f"Best R² NS: {best_r_result['NS_r2']:.4f}")
             axs[2,0].scatter(best_r_result['EW_y_test'],best_r_result['EW_pred'], marker='x')
+            lims = [min(axs[2,0].get_xlim()[0], axs[2,0].get_ylim()[0]), max(axs[2,0].get_xlim()[1], axs[2,0].get_ylim()[1])]
+            axs[2,0].plot(lims, lims, 'r--')           
             axs[2,0].set_title(f"Best R² EW: {best_r_result['EW_r2']:.4f}")
             # rmse
             axs[0,1].scatter(best_rmse_result['Z_y_test'],best_rmse_result['Z_pred'], marker='x')
+            lims = [min(axs[0,1].get_xlim()[0], axs[0,1].get_ylim()[0]), max(axs[0,1].get_xlim()[1], axs[0,1].get_ylim()[1])]
+            axs[0,1].plot(lims, lims, 'r--') 
             axs[0,1].set_title(f"Best rmse Z: {best_rmse_result['Z_rmse']:.4f}")
             axs[1,1].scatter(best_rmse_result['NS_y_test'],best_rmse_result['NS_pred'], marker='x')
+            lims = [min(axs[1,1].get_xlim()[0], axs[1,1].get_ylim()[0]), max(axs[1,1].get_xlim()[1], axs[1,1].get_ylim()[1])]
+            axs[1,1].plot(lims, lims, 'r--') 
             axs[1,1].set_title(f"Best rmse Z: {best_rmse_result['NS_rmse']:.4f}")
             axs[2,1].scatter(best_rmse_result['EW_y_test'],best_rmse_result['EW_pred'], marker='x')
+            lims = [min(axs[2,1].get_xlim()[0], axs[2,1].get_ylim()[0]), max(axs[2,1].get_xlim()[1], axs[2,1].get_ylim()[1])]
+            axs[2,1].plot(lims, lims, 'r--') 
             axs[2,1].set_title(f"Best rmse Z: {best_rmse_result['avg_rmse']:.4f}")
             # Figure Labels
             if variable_units is None: 

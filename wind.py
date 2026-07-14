@@ -2301,6 +2301,8 @@ def seis_aws_fft_cor(spectra,
 def seis_aws_rf(spectra,
                 fmin = 1,
                 fmax = 49,
+                f_band_width = 1,
+                step_size = 1,
                 csv = False,
                 csv_title = 'results',
                 plot_best = True,
@@ -2319,10 +2321,22 @@ def seis_aws_rf(spectra,
             Minimum frequency value for calculating the power of each bandwidths.
         fmax (int):
             Maximum frequency value for calculating the power of each  bandwidths.
+        f_band_width (int):
+            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+        step_size (int):
+            Frequency band step size. Set to less than f_band_width for overlapping bands. 
         csv (bool):
             True/False. True to save returns as a csv file.
         csv_title (str):
             Title for the output csv file.
+        plot_best (bool):
+            True/False. Plots the best R² and rmse for each station channel.
+        plot_title (str):
+            Title for plot_best plots.
+        variable_units (str):
+            AWS variable label, e.g 'wind speed (m/s)'
+        plot_stat_results (bool):
+            Plots all the R² and rmse values against frequency bandwidth centres.
 
     Outputs:
         best_r_results (list):
@@ -2341,10 +2355,10 @@ def seis_aws_rf(spectra,
 
     # Create Bandwidths
     bands = []
-    for f1 in range(fmin, fmax):
-        for f2 in range(f1+1, fmax+1):
-            band = (f1, f2)
-            bands.append(band)
+    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+        f2 = f1 + f_band_width
+        band = (f1, f2)
+        bands.append(band)
 
     # Loop through stations
     for station_dict in spectra:
@@ -2357,16 +2371,6 @@ def seis_aws_rf(spectra,
         freq = station_dict[station][0]['freq']
         aws_values = station_dict[station][0]['aws_values']
 
-        # Clean data (may not be required anymore, idk)
-        valid = (~np.any(np.isnan(EW_power), axis=1)
-                & ~np.any(np.isnan(NS_power), axis=1)
-                & ~np.any(np.isnan(Z_power), axis=1))
-
-        EW_valid = EW_power[valid]
-        NS_valid = NS_power[valid]
-        Z_valid = Z_power[valid]
-        aws_valid = np.asarray(aws_values)[valid]
-
         # Setup results
         station_results = []
 
@@ -2375,19 +2379,19 @@ def seis_aws_rf(spectra,
             band_width = (freq >= f1) & (freq < f2)
 
             # Convert to log to better inspect power scales and apply bandwidth
-            Z_log = np.log10(Z_valid[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
-            NS_log = np.log10(NS_valid[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
-            EW_log = np.log10(EW_valid[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
+            Z_log = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
+            NS_log = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
+            EW_log = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
      
             # Train Model
-            Z_X_train, Z_X_test, Z_y_train, Z_y_test = train_test_split(Z_log, aws_valid, test_size=0.2,random_state = 42)
-            NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(NS_log, aws_valid, test_size=0.2,random_state = 42)
-            EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_valid, test_size=0.2,random_state = 42)
+            Z_X_train, Z_X_test, Z_y_train, Z_y_test = train_test_split(Z_log, aws_values, test_size=0.2,random_state = 42)
+            NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(NS_log, aws_values, test_size=0.2,random_state = 42)
+            EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_values, test_size=0.2,random_state = 42)
             
             # Define Random Forest Model
-            Z_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-            NS_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-            EW_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+            Z_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
+            NS_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
+            EW_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
 
             # Fit Model
             Z_model.fit(Z_X_train, Z_y_train)
@@ -2404,7 +2408,7 @@ def seis_aws_rf(spectra,
             NS_rmse = np.sqrt(mean_squared_error(NS_y_test,NS_pred))
             EW_rmse = np.sqrt(mean_squared_error(EW_y_test,EW_pred))
 
-            # R2
+            # R²
             Z_r = r2_score(Z_y_test, Z_pred)
             NS_r = r2_score(NS_y_test, NS_pred)
             EW_r = r2_score(EW_y_test, EW_pred)
@@ -2486,34 +2490,40 @@ def seis_aws_rf(spectra,
             lims = [min(axs[0,0].get_xlim()[0], axs[0,0].get_ylim()[0]), max(axs[0,0].get_xlim()[1], axs[0,0].get_ylim()[1])]
             axs[0,0].plot(lims, lims, 'r--')
             axs[0,0].set_title(f"Best R² Z: {best_r_result['Z_r2']:.4f}")
+
             axs[1,0].scatter(best_r_result['NS_y_test'],best_r_result['NS_pred'], marker='x')
             lims = [min(axs[1,0].get_xlim()[0], axs[1,0].get_ylim()[0]), max(axs[1,0].get_xlim()[1], axs[1,0].get_ylim()[1])]
             axs[1,0].plot(lims, lims, 'r--')
             axs[1,0].set_title(f"Best R² NS: {best_r_result['NS_r2']:.4f}")
+
             axs[2,0].scatter(best_r_result['EW_y_test'],best_r_result['EW_pred'], marker='x')
             lims = [min(axs[2,0].get_xlim()[0], axs[2,0].get_ylim()[0]), max(axs[2,0].get_xlim()[1], axs[2,0].get_ylim()[1])]
             axs[2,0].plot(lims, lims, 'r--')           
             axs[2,0].set_title(f"Best R² EW: {best_r_result['EW_r2']:.4f}")
+
             # rmse
             axs[0,1].scatter(best_rmse_result['Z_y_test'],best_rmse_result['Z_pred'], marker='x')
             lims = [min(axs[0,1].get_xlim()[0], axs[0,1].get_ylim()[0]), max(axs[0,1].get_xlim()[1], axs[0,1].get_ylim()[1])]
             axs[0,1].plot(lims, lims, 'r--') 
             axs[0,1].set_title(f"Best rmse Z: {best_rmse_result['Z_rmse']:.4f}")
+
             axs[1,1].scatter(best_rmse_result['NS_y_test'],best_rmse_result['NS_pred'], marker='x')
             lims = [min(axs[1,1].get_xlim()[0], axs[1,1].get_ylim()[0]), max(axs[1,1].get_xlim()[1], axs[1,1].get_ylim()[1])]
             axs[1,1].plot(lims, lims, 'r--') 
             axs[1,1].set_title(f"Best rmse Z: {best_rmse_result['NS_rmse']:.4f}")
+
             axs[2,1].scatter(best_rmse_result['EW_y_test'],best_rmse_result['EW_pred'], marker='x')
             lims = [min(axs[2,1].get_xlim()[0], axs[2,1].get_ylim()[0]), max(axs[2,1].get_xlim()[1], axs[2,1].get_ylim()[1])]
             axs[2,1].plot(lims, lims, 'r--') 
             axs[2,1].set_title(f"Best rmse Z: {best_rmse_result['avg_rmse']:.4f}")
+            
             # Figure Labels
             if variable_units is None: 
                 fig.supxlabel('Observed AWS Measurement')
                 fig.supylabel('Predicted AWS Measurement')
             else:
-                fig.supxlabel(f'Observed ' + {variable_units})
-                fig.supylabel(f'Predicted ' + {variable_units})
+                fig.supxlabel(f'Observed {variable_units}')
+                fig.supylabel(f'Predicted {variable_units}')
             if plot_title is None:
                 title = f'{station}: Observed AWS Measurement vs Predicted AWS Measured'
             else:

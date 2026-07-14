@@ -2302,7 +2302,10 @@ def seis_aws_rf(spectra,
                 fmin = 1,
                 fmax = 49,
                 csv = False,
-                csv_title = 'results'):
+                csv_title = 'results',
+                plot_best = True,
+                plot_title = None,
+                variable_units = None):
     
     """
     Finds the correlation between seismic data and AWS wind speed.
@@ -2376,7 +2379,7 @@ def seis_aws_rf(spectra,
             Z_X_train, Z_X_test, Z_y_train, Z_y_test = train_test_split(Z_log, aws_valid, test_size=0.2,random_state = 42)
             NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(NS_log, aws_valid, test_size=0.2,random_state = 42)
             EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_valid, test_size=0.2,random_state = 42)
-
+            
             # Define Random Forest Model
             Z_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
             NS_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
@@ -2391,7 +2394,7 @@ def seis_aws_rf(spectra,
             Z_pred = Z_model.predict(Z_X_test)
             NS_pred = NS_model.predict(NS_X_test)
             EW_pred = EW_model.predict(EW_X_test)
-
+            
             # rmse
             Z_rmse = np.sqrt(mean_squared_error(Z_y_test,Z_pred))
             NS_rmse = np.sqrt(mean_squared_error(NS_y_test,NS_pred))
@@ -2413,7 +2416,13 @@ def seis_aws_rf(spectra,
                 'Z_rmse': Z_rmse,
                 'NS_rmse': NS_rmse,
                 'EW_rmse': EW_rmse,
-                'avg_rmse': (Z_rmse + NS_rmse + EW_rmse) / 3})
+                'avg_rmse': (Z_rmse + NS_rmse + EW_rmse) / 3,
+                'Z_y_test': Z_y_test,
+                'NS_y_test': NS_y_test,
+                'EW_y_test': EW_y_test,
+                'Z_pred': Z_pred,
+                'NS_pred': NS_pred,
+                'EW_pred': EW_pred})
         
         # Find best result
         # R²
@@ -2438,6 +2447,37 @@ def seis_aws_rf(spectra,
         print(f"Average rmse: {best_rmse_result['avg_rmse']:.4f}")
         
         results.append(station_results)
+
+        if plot_best == True:
+
+            fig, axs = plt.subplots(3, 2, figsize=(12, 12))
+            # R²
+            axs[0,0].scatter(best_r_result['Z_y_test'],best_r_result['Z_pred'], marker='x')
+            axs[0,0].set_title(f"Best R² Z: {best_r_result['Z_r2']:.4f}")
+            axs[1,0].scatter(best_r_result['NS_y_test'],best_r_result['NS_pred'], marker='x')
+            axs[1,0].set_title(f"Best R² NS: {best_r_result['NS_r2']:.4f}")
+            axs[2,0].scatter(best_r_result['EW_y_test'],best_r_result['EW_pred'], marker='x')
+            axs[2,0].set_title(f"Best R² EW: {best_r_result['EW_r2']:.4f}")
+            # rmse
+            axs[0,1].scatter(best_rmse_result['Z_y_test'],best_rmse_result['Z_pred'], marker='x')
+            axs[0,1].set_title(f"Best rmse Z: {best_rmse_result['Z_rmse']:.4f}")
+            axs[1,1].scatter(best_rmse_result['NS_y_test'],best_rmse_result['NS_pred'], marker='x')
+            axs[1,1].set_title(f"Best rmse Z: {best_rmse_result['NS_rmse']:.4f}")
+            axs[2,1].scatter(best_rmse_result['EW_y_test'],best_rmse_result['EW_pred'], marker='x')
+            axs[2,1].set_title(f"Best rmse Z: {best_rmse_result['avg_rmse']:.4f}")
+            # Figure Labels
+            if variable_units is None: 
+                fig.supxlabel('Observed AWS Measurement')
+                fig.supylabel('Predicted AWS Measurement')
+            else:
+                fig.supxlabel(f'Observed ' + {variable_units})
+                fig.supylabel(f'Predicted ' + {variable_units})
+            if plot_title is None:
+                title = f'{station}: Observed AWS Measurement vs Predicted AWS Measured'
+            else:
+                title = plot_title 
+
+            plt.suptitle(title)
 
         # Save to csv file setup
         if csv == True:

@@ -2650,17 +2650,21 @@ def seis_aws_ridge(spectra,
             EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_values, test_size=0.2,random_state = 42)
             
             # Scale
-            Z_X_train_scaled = StandardScaler().fit_transform(Z_X_train)
-            Z_X_test_scaled = StandardScaler().fit_transform(Z_X_test)
-            NS_X_train_scaled = StandardScaler().fit_transform(NS_X_train)
-            NS_X_test_scaled = StandardScaler().fit_transform(NS_X_test)
-            EW_X_train_scaled = StandardScaler().fit_transform(EW_X_train)
-            EW_X_test_scaled = StandardScaler().fit_transform(EW_X_test)
+            Z_scaler = StandardScaler()
+            NS_scaler = StandardScaler()
+            EW_scaler = StandardScaler()
+            Z_X_train_scaled = Z_scaler.fit_transform(Z_X_train)
+            Z_X_test_scaled = Z_scaler.fit_transform(Z_X_test)
+            NS_X_train_scaled = NS_scaler.fit_transform(NS_X_train)
+            NS_X_test_scaled = NS_scaler.fit_transform(NS_X_test)
+            EW_X_train_scaled = EW_scaler.fit_transform(EW_X_train)
+            EW_X_test_scaled = EW_scaler.fit_transform(EW_X_test)
 
             # Ridge Model
             Z_model = Ridge(alpha=1.0, solver='auto')
             NS_model = Ridge(alpha=1.0, solver='auto')
             EW_model = Ridge(alpha=1.0, solver='auto')
+
             Z_model.fit(Z_X_train_scaled, Z_y_train)
             NS_model.fit(NS_X_train_scaled, NS_y_train)
             EW_model.fit(EW_X_train_scaled, EW_y_train)
@@ -2765,11 +2769,7 @@ def seis_aws_ridge(spectra,
                     'Z_r2': result['Z_r2'],
                     'NS_r2': result['NS_r2'],
                     'EW_r2': result['EW_r2'],
-                    'avg_r2': result['avg_r2'],
-                    'Z_rmse': result['Z_rmse'],
-                    'NS_rmse': result['NS_rmse'],
-                    'EW_rmse': result['EW_rmse'],
-                    'avg_rmse': result['avg_rmse']})
+                    'avg_r2': result['avg_r2']})
 
     # Save all results to csv file
     if csv == True:

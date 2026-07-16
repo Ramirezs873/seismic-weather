@@ -19,7 +19,7 @@ from scipy.fft import fft,fftfreq, rfft, rfftfreq
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.preprocessing import StandardScaler
 
 def read_data(path, 
@@ -2381,6 +2381,8 @@ def seis_aws_rf(spectra,
             band_width = (freq >= f1) & (freq < f2)
 
             # Convert to log to better inspect power scales and apply bandwidth
+            # [:, band_width], select frequencies and slice unwanted freq data from the row
+            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
             Z_log = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
             NS_log = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
             EW_log = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
@@ -2640,6 +2642,8 @@ def seis_aws_ridge(spectra,
             band_width = (freq >= f1) & (freq < f2)
 
             # Convert to log to better inspect power scales and apply bandwidth
+            # [:, band_width], select frequencies and slice unwanted freq data from the row
+            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
             Z_log = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
             NS_log = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
             EW_log = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
@@ -2649,16 +2653,16 @@ def seis_aws_ridge(spectra,
             NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(NS_log, aws_values, test_size=0.2,random_state = 42)
             EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_values, test_size=0.2,random_state = 42)
             
-            # Scale
+            # Scale 
             Z_scaler = StandardScaler()
             NS_scaler = StandardScaler()
             EW_scaler = StandardScaler()
             Z_X_train_scaled = Z_scaler.fit_transform(Z_X_train)
-            Z_X_test_scaled = Z_scaler.fit_transform(Z_X_test)
+            Z_X_test_scaled = Z_scaler.transform(Z_X_test)
             NS_X_train_scaled = NS_scaler.fit_transform(NS_X_train)
-            NS_X_test_scaled = NS_scaler.fit_transform(NS_X_test)
+            NS_X_test_scaled = NS_scaler.transform(NS_X_test)
             EW_X_train_scaled = EW_scaler.fit_transform(EW_X_train)
-            EW_X_test_scaled = EW_scaler.fit_transform(EW_X_test)
+            EW_X_test_scaled = EW_scaler.transform(EW_X_test)
 
             # Ridge Model
             Z_model = Ridge(alpha=1.0, solver='auto')
@@ -2671,8 +2675,8 @@ def seis_aws_ridge(spectra,
 
             # Predictions
             Z_pred = Z_model.predict(Z_X_test_scaled)
-            NS_pred = Z_model.predict(NS_X_test_scaled)
-            EW_pred = Z_model.predict(EW_X_test_scaled)
+            NS_pred = NS_model.predict(NS_X_test_scaled)
+            EW_pred = EW_model.predict(EW_X_test_scaled)
 
             # R²
             Z_r = Z_model.score(Z_X_test_scaled, Z_y_test)
@@ -2707,6 +2711,227 @@ def seis_aws_ridge(spectra,
         print(f"EW R²: {best_r_result['EW_r2']:.4f}")
         print(f"Average R²: {best_r_result['avg_r2']:.4f}")
        
+        results.append(station_results)
+
+        # Plot all average R² and rmse results against centre frequency
+        if plot_stat_results == True:
+            band_centres = []
+            r2_list = []
+            for r in station_results:
+                band_centre = [(r['fmin'] + r['fmax'])/2]
+                r2 = r['avg_r2']
+                band_centres.append(band_centre)
+                r2_list.append(r2)
+            
+            # R²
+            plt.scatter(band_centres, r2_list)
+            plt.title(f'{station}: Band Centre Frequency vs Average R²')
+            plt.xlabel('Band Centre Frequency (Hz)')
+            plt.ylabel('Average R²')
+            
+        # Plot the best R² and rmse results for each station channel
+        if plot_best == True:
+            
+            fig, axs = plt.subplots(3, 1, figsize=(10, 10))
+            # R²
+            axs[0].scatter(best_r_result['Z_y_test'],best_r_result['Z_pred'], marker='x')
+            lims = [min(axs[0].get_xlim()[0], axs[0].get_ylim()[0]), max(axs[0].get_xlim()[1], axs[0].get_ylim()[1])]
+            axs[0].plot(lims, lims, 'r--')
+            axs[0].set_title(f"Best R² Z: {best_r_result['Z_r2']:.4f}")
+
+            axs[1].scatter(best_r_result['NS_y_test'],best_r_result['NS_pred'], marker='x')
+            lims = [min(axs[1].get_xlim()[0], axs[1].get_ylim()[0]), max(axs[1].get_xlim()[1], axs[1].get_ylim()[1])]
+            axs[1].plot(lims, lims, 'r--')
+            axs[1].set_title(f"Best R² NS: {best_r_result['NS_r2']:.4f}")
+
+            axs[2].scatter(best_r_result['EW_y_test'],best_r_result['EW_pred'], marker='x')
+            lims = [min(axs[2].get_xlim()[0], axs[2].get_ylim()[0]), max(axs[2].get_xlim()[1], axs[2].get_ylim()[1])]
+            axs[2].plot(lims, lims, 'r--')           
+            axs[2].set_title(f"Best R² EW: {best_r_result['EW_r2']:.4f}")
+
+            # Figure Labels
+            if variable_units is None: 
+                fig.supxlabel('Observed AWS Measurement')
+                fig.supylabel('Predicted AWS Measurement')
+            else:
+                fig.supxlabel(f'Observed {variable_units}')
+                fig.supylabel(f'Predicted {variable_units}')
+            if plot_title is None:
+                title = f'{station}: Observed AWS Measurement vs Predicted AWS Measured'
+            else:
+                title = plot_title 
+
+            plt.suptitle(title)
+
+        # Save to csv file setup
+        if csv == True:
+            for result in station_results:
+                all_results.append({
+                    'station': station,
+                    'fmin': result['fmin'],
+                    'fmax': result['fmax'],
+                    'Z_r2': result['Z_r2'],
+                    'NS_r2': result['NS_r2'],
+                    'EW_r2': result['EW_r2'],
+                    'avg_r2': result['avg_r2']})
+
+    # Save all results to csv file
+    if csv == True:
+        df = pd.DataFrame(all_results)
+        csv_name = f"{csv_title}.csv"
+        df.to_csv(csv_name, index=False)
+        print(f"Results saved to {csv_name}")
+                                
+    return best_r_results, results
+
+
+def seis_aws_elasticnet(spectra,
+                        fmin = 1,
+                        fmax = 49,
+                        f_band_width = 1,
+                        step_size = 1,
+                        csv = False,
+                        csv_title = 'results',
+                        plot_best = True,
+                        plot_title = None,
+                        variable_units = None,
+                        plot_stat_results = True):
+    
+    """
+    Finds the correlation between seismic data and AWS wind speed 
+    via a ElasticNet Regression.
+
+    Parameters:
+        spectra (list):
+            A list of dictionaries containing the frequency, power, and aws data 
+            for each seismic component (EW, NS, Z) for each station and time period.
+        fmin (int):
+            Minimum frequency value for calculating the power of each bandwidths.
+        fmax (int):
+            Maximum frequency value for calculating the power of each  bandwidths.
+        f_band_width (int):
+            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+        step_size (int):
+            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+        csv (bool):
+            True/False. True to save returns as a csv file.
+        csv_title (str):
+            Title for the output csv file.
+        plot_best (bool):
+            True/False. Plots the best R² and rmse for each station channel.
+        plot_title (str):
+            Title for plot_best plots.
+        variable_units (str):
+            AWS variable label, e.g 'wind speed (m/s)'
+        plot_stat_results (bool):
+            Plots all the R² and rmse values against frequency bandwidth centres.
+
+    Outputs:
+        best_r_results (list):
+            A list of dictionaries containing information about the best (max) r2 correlation result for each station.
+        best_rmse_results (list):
+            A list of dictionaries containing information about the best (min) rmse correlation result for each station.
+        results (list):
+            A list of dictionaries containing information about all the correlation results for each station.
+    """
+    
+    
+    # Setup Result Lists
+    results = []
+    all_results = []
+    best_r_results = []
+
+    # Create Bandwidths
+    bands = []
+    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+        f2 = f1 + f_band_width
+        band = (f1, f2)
+        bands.append(band)
+
+    # Loop through stations
+    for station_dict in spectra:
+
+        # Setup Variables
+        station = list(station_dict.keys())[0] 
+        EW_power = station_dict[station][0]['EW']
+        NS_power = station_dict[station][0]['NS']
+        Z_power = station_dict[station][0]['Z']
+        freq = station_dict[station][0]['freq']
+        aws_values = station_dict[station][0]['aws_values']
+
+        # Setup results
+        station_results = []
+
+        # Apply bandwidths to data
+        for i, (f1,f2) in enumerate(bands):
+            band_width = (freq >= f1) & (freq < f2)
+    
+            # Convert to log to better inspect power scales and apply bandwidth
+            # [:, band_width], select frequencies and slice unwanted freq data from the row
+            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+            Z_log = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
+            NS_log = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
+            EW_log = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20).reshape(-1,1)
+
+            # Train Model
+            Z_X_train, Z_X_test, Z_y_train, Z_y_test = train_test_split(Z_log, aws_values, test_size=0.2,random_state = 42)
+            NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(NS_log, aws_values, test_size=0.2,random_state = 42)
+            EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_values, test_size=0.2,random_state = 42)
+            
+            # Scale 
+            Z_scaler = StandardScaler()
+            NS_scaler = StandardScaler()
+            EW_scaler = StandardScaler()
+            Z_X_train_scaled = Z_scaler.fit_transform(Z_X_train)
+            Z_X_test_scaled = Z_scaler.transform(Z_X_test)
+            NS_X_train_scaled = NS_scaler.fit_transform(NS_X_train)
+            NS_X_test_scaled = NS_scaler.transform(NS_X_test)
+            EW_X_train_scaled = EW_scaler.fit_transform(EW_X_train)
+            EW_X_test_scaled = EW_scaler.transform(EW_X_test)
+
+            # Elastic Net Model (Need to find optimal l1 still)
+            Z_model = ElasticNet(alpha=0.08, l1_ratio=0.5).fit(Z_X_train_scaled, Z_y_train)
+            NS_model = ElasticNet(alpha=0.08, l1_ratio=0.5).fit(NS_X_train_scaled, NS_y_train)
+            EW_model = ElasticNet(alpha=0.08, l1_ratio=0.5).fit(EW_X_train_scaled, EW_y_train)
+
+            # Predictions
+            Z_pred = Z_model.predict(Z_X_test_scaled)
+            NS_pred = NS_model.predict(NS_X_test_scaled)
+            EW_pred = EW_model.predict(EW_X_test_scaled)
+
+            # R²
+            Z_r = Z_model.score(Z_X_test_scaled, Z_y_test)
+            NS_r = NS_model.score(NS_X_test_scaled, NS_y_test)
+            EW_r = EW_model.score(EW_X_test_scaled, EW_y_test)
+            
+            # Store results
+            station_results.append({
+                'fmin': f1,
+                'fmax': f2,
+                'Z_r2': Z_r,
+                'NS_r2': NS_r,
+                'EW_r2': EW_r,
+                'avg_r2': (Z_r + NS_r + EW_r) / 3,
+                'Z_y_test': Z_y_test,
+                'NS_y_test': NS_y_test,
+                'EW_y_test': EW_y_test,
+                'Z_pred': Z_pred,
+                'NS_pred': NS_pred,
+                'EW_pred': EW_pred})
+        
+        # Find best result
+        # R²
+        best_r_result = max(station_results, key=lambda x: x['avg_r2'])
+        best_r_results.append({'station': station, **best_r_result})
+
+        # Print best result
+        # R²
+        print(f"\nBest R² value frequency range for {station}: {best_r_result['fmin']} - {best_r_result['fmax']} Hz")
+        print(f"Z R²: {best_r_result['Z_r2']:.4f}")
+        print(f"NS R²: {best_r_result['NS_r2']:.4f}")
+        print(f"EW R²: {best_r_result['EW_r2']:.4f}")
+        print(f"Average R²: {best_r_result['avg_r2']:.4f}")
+    
         results.append(station_results)
 
         # Plot all average R² and rmse results against centre frequency

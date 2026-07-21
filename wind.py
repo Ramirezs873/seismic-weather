@@ -24,6 +24,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVR
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
+from sklearn.inspection import permutation_importance
 
 def read_data(path, 
               station_code, 
@@ -3727,13 +3728,6 @@ def full_pca_ridge(spectra,
 
         # Plot all average R² and rmse results against centre frequency
         if plot_stat_results == True:
-            band_centres = []
-            r2_list = []
-            for r in station_results:
-                band_centre = [(r['fmin'] + r['fmax'])/2]
-                r2 = r['avg_r2']
-                band_centres.append(band_centre)
-                r2_list.append(r2)
             
             # R²
             fig, axs = plt.subplots(3, 1, figsize=(10, 10))
@@ -3748,6 +3742,180 @@ def full_pca_ridge(spectra,
             fig.supxlabel('Frequency (Hz)')
             fig.supylabel('PCA + Ridge Contribution')
             
+        # Save to csv file setup
+        if csv == True:
+            for result in station_results:
+                all_results.append({
+                    'station': station,
+                    'fmin': result['fmin'],
+                    'fmax': result['fmax'],
+                    'Z_r2': result['Z_r2'],
+                    'NS_r2': result['NS_r2'],
+                    'EW_r2': result['EW_r2'],
+                    'avg_r2': result['avg_r2']})
+
+    # Save all results to csv file
+    if csv == True:
+        df = pd.DataFrame(all_results)
+        csv_name = f"{csv_title}.csv"
+        df.to_csv(csv_name, index=False)
+        print(f"Results saved to {csv_name}")
+                                
+    return results
+
+
+def full_svr(spectra,
+                 fmin = 1,
+                 fmax = 49,
+                 csv = False,
+                 csv_title = 'results',
+                 plot_stat_results = True):
+    
+    """
+    Finds the correlation between seismic data and AWS wind speed 
+    via a SVR Regression. Full inspection
+
+    Parameters:
+        spectra (list):
+            A list of dictionaries containing the frequency, power, and aws data 
+            for each seismic component (EW, NS, Z) for each station and time period.
+        fmin (int):
+            Minimum frequency value for calculating the power of each bandwidths.
+        fmax (int):
+            Maximum frequency value for calculating the power of each  bandwidths.
+        csv (bool):
+            True/False. True to save returns as a csv file.
+        csv_title (str):
+            Title for the output csv file.
+        plot_stat_results (bool):
+            Plots all the R² and rmse values against frequency bandwidth centres.
+
+    Outputs:
+        results (list):
+            A list of dictionaries containing information about all the correlation results for each station.
+    """
+    
+    
+    # Setup Result Lists
+    results = []
+    all_results = []
+
+
+    # Loop through stations
+    for station_dict in spectra:
+
+        # Setup Variables
+        station = list(station_dict.keys())[0] 
+        EW_power = station_dict[station][0]['EW']
+        NS_power = station_dict[station][0]['NS']
+        Z_power = station_dict[station][0]['Z']
+        freq = station_dict[station][0]['freq']
+        aws_values = station_dict[station][0]['aws_values']
+
+        # Setup results
+        station_results = []
+
+        # Apply bandwidths to data
+        band_width = (freq >= fmin) & (freq < fmax)
+
+        # Convert to log to better inspect power scales and apply bandwidth
+        # [:, band_width], select frequencies and slice unwanted freq data from the row
+        # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+        Z_log = np.log10(Z_power[:, band_width] + 1e-20)
+        NS_log = np.log10(NS_power[:, band_width] + 1e-20)
+        EW_log = np.log10(EW_power[:, band_width] + 1e-20)
+    
+        # Train Model
+        Z_X_train, Z_X_test, Z_y_train, Z_y_test = train_test_split(Z_log, aws_values, test_size=0.2,random_state = 42)
+        NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(NS_log, aws_values, test_size=0.2,random_state = 42)
+        EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_values, test_size=0.2,random_state = 42)
+        
+        # Pipeline
+        # Scale, SVR
+        # (Need to find optimal values)
+        Z_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=1.0, epsilon=0.2))])
+        NS_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=1.0, epsilon=0.2))])
+        EW_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=1.0, epsilon=0.2))])
+
+        # Cross Validation
+        cv = KFold(n_splits=5, shuffle=True, random_state=42)
+        scores_Z = cross_val_score(Z_model, Z_log, aws_values, cv=cv, scoring='r2')
+        scores_NS = cross_val_score(NS_model, NS_log, aws_values, cv=cv, scoring='r2')
+        scores_EW = cross_val_score(EW_model, EW_log, aws_values, cv=cv, scoring='r2')
+
+        # Fit Model
+        Z_model.fit(Z_X_train, Z_y_train)
+        NS_model.fit(NS_X_train, NS_y_train)
+        EW_model.fit(EW_X_train, EW_y_train)
+
+        # Predictions
+        Z_pred = Z_model.predict(Z_X_test)
+        NS_pred = NS_model.predict(NS_X_test)
+        EW_pred = EW_model.predict(EW_X_test)
+
+        # R²
+        Z_r = Z_model.score(Z_X_test, Z_y_test)
+        NS_r = NS_model.score(NS_X_test, NS_y_test)
+        EW_r = EW_model.score(EW_X_test, EW_y_test)
+        # Freq Importance
+        Z_importance = permutation_importance(Z_model, Z_X_test, Z_y_test, n_repeats=3, scoring='r2').importances_mean
+        NS_importance = permutation_importance(NS_model, NS_X_test, NS_y_test, n_repeats=3, scoring='r2').importances_mean
+        EW_importance = permutation_importance(EW_model, EW_X_test, EW_y_test, n_repeats=3, scoring='r2').importances_mean
+
+        # Store results
+        station_results.append({
+            'fmin': fmin,
+            'fmax': fmax,
+            'Z_r2': Z_r,
+            'NS_r2': NS_r,
+            'EW_r2': EW_r,
+            'avg_r2': (Z_r + NS_r + EW_r) / 3,
+            'Z_y_test': Z_y_test,
+            'NS_y_test': NS_y_test,
+            'EW_y_test': EW_y_test,
+            'Z_pred': Z_pred,
+            'NS_pred': NS_pred,
+            'EW_pred': EW_pred,
+            'Z_cv_r2': scores_Z.mean(),
+            'NS_cv_r2': scores_NS.mean(),
+            'EW_cv_r2': scores_EW.mean(),
+            'avg_cv_r2': (scores_Z.mean() + scores_NS.mean() + scores_EW.mean()) / 3,
+            'Z_cv_std': scores_Z.std(),
+            'NS_cv_std': scores_NS.std(),
+            'EW_cv_std': scores_EW.std(),
+            'avg_cv_std': (scores_Z.std() + scores_NS.std() + scores_EW.std()) / 3 })
+    
+        # Print best result
+        # R²
+        print(f"Z R²: {Z_r:.4f}")
+        print(f"NS R²: {NS_r:.4f}")
+        print(f"EW R²: {EW_r:.4f}")
+        print(f"Average R²: {(Z_r + NS_r + EW_r) / 3:.4f}")
+        # Cross Validation R²
+        print(f"Z cv R²: {scores_Z.mean():.4f} + {scores_Z.std():.4f}")
+        print(f"NS cv R²: {scores_NS.mean():.4f} + {scores_NS.std():.4f}")
+        print(f"EW cv R²: {scores_EW.mean():.4f} + {scores_EW.std():.4f}")
+        print(f"Average cv R²: {(scores_Z.mean() + scores_NS.mean() + scores_EW.mean()) / 3:.4f} +/- {(scores_Z.std() + scores_NS.std() + scores_EW.std()) / 3:.4f}")
+        
+        results.append(station_results)
+
+        # Plot all average R² and rmse results against centre frequency
+        if plot_stat_results == True:
+            
+            
+            # R²
+            fig, axs = plt.subplots(3, 1, figsize=(10, 10))
+            axs[0].scatter(freq[band_width], Z_importance)
+            axs[0].set_title('Z')
+            axs[1].scatter(freq[band_width], NS_importance)
+            axs[1].set_title('NS')
+            axs[2].scatter(freq[band_width], EW_importance)
+            axs[2].set_title('EW')
+
+            plt.suptitle(f'{station}:')
+            fig.supxlabel('Frequency (Hz)')
+            fig.supylabel('SVR Permutation Importance')
+
         # Save to csv file setup
         if csv == True:
             for result in station_results:

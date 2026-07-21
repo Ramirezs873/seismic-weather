@@ -17,7 +17,7 @@ from datetime import timedelta
 from obspy import read
 from scipy.fft import fft,fftfreq, rfft, rfftfreq
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.preprocessing import StandardScaler
@@ -2356,6 +2356,7 @@ def seis_aws_rf(spectra,
     all_results = []
     best_r_results = []
     best_rmse_results = []
+    best_cv_r_results = []
 
     # Create Bandwidths
     bands = []
@@ -2398,6 +2399,11 @@ def seis_aws_rf(spectra,
             Z_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
             NS_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
             EW_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
+            
+            # Cross Validation
+            scores_Z = cross_val_score(Z_model, Z_log, aws_values, cv=5, scoring='r2')
+            scores_NS = cross_val_score(NS_model, NS_log, aws_values, cv=5, scoring='r2')
+            scores_EW = cross_val_score(EW_model, EW_log, aws_values, cv=5, scoring='r2')
 
             # Fit Model
             Z_model.fit(Z_X_train, Z_y_train)
@@ -2408,7 +2414,7 @@ def seis_aws_rf(spectra,
             Z_pred = Z_model.predict(Z_X_test)
             NS_pred = NS_model.predict(NS_X_test)
             EW_pred = EW_model.predict(EW_X_test)
-            
+
             # rmse
             Z_rmse = np.sqrt(mean_squared_error(Z_y_test,Z_pred))
             NS_rmse = np.sqrt(mean_squared_error(NS_y_test,NS_pred))
@@ -2436,7 +2442,15 @@ def seis_aws_rf(spectra,
                 'EW_y_test': EW_y_test,
                 'Z_pred': Z_pred,
                 'NS_pred': NS_pred,
-                'EW_pred': EW_pred})
+                'EW_pred': EW_pred,
+                'Z_cv_r2': scores_Z.mean(),
+                'NS_cv_r2': scores_NS.mean(),
+                'EW_cv_r2': scores_EW.mean(),
+                'avg_cv_r2': (scores_Z.mean() + scores_NS.mean() + scores_EW.mean()) / 3,
+                'Z_cv_std': scores_Z.std(),
+                'NS_cv_std': scores_NS.std(),
+                'EW_cv_std': scores_EW.std(),
+                'avg_cv_std': (scores_Z.std() + scores_NS.std() + scores_EW.std()) / 3 })
         
         # Find best result
         # R²
@@ -2445,6 +2459,9 @@ def seis_aws_rf(spectra,
         # rmse
         best_rmse_result = min(station_results, key=lambda x: x['avg_rmse'])
         best_rmse_results.append({'station': station, **best_rmse_result})
+        # Cross Validation R²
+        best_cv_r_result = max(station_results, key=lambda x: x['avg_cv_r2'])
+        best_cv_r_results.append({'station': station, **best_cv_r_result})
     
         # Print best result
         # R²
@@ -2459,6 +2476,12 @@ def seis_aws_rf(spectra,
         print(f"NS rmse: {best_rmse_result['NS_rmse']:.4f}")
         print(f"EW rmse: {best_rmse_result['EW_rmse']:.4f}")
         print(f"Average rmse: {best_rmse_result['avg_rmse']:.4f}")
+        # Cross Validation R²
+        print(f"\nBest cv R² value frequency range for {station}: {best_cv_r_result['fmin']} - {best_cv_r_result['fmax']} Hz")
+        print(f"Z cv R²: {best_cv_r_result['Z_cv_r2']:.4f} + {best_cv_r_result['Z_cv_std']:.4f}")
+        print(f"NS cv R²: {best_cv_r_result['NS_cv_r2']:.4f} + {best_cv_r_result['NS_cv_std']:.4f}")
+        print(f"EW cv R²: {best_cv_r_result['EW_cv_r2']:.4f} + {best_cv_r_result['EW_cv_std']:.4f}")
+        print(f"Average cv R²: {best_cv_r_result['avg_cv_r2']:.4f}")
         
         results.append(station_results)
 
@@ -2560,7 +2583,7 @@ def seis_aws_rf(spectra,
         df.to_csv(csv_name, index=False)
         print(f"Results saved to {csv_name}")
                                 
-    return best_r_results, best_rmse_results, results
+    return best_r_results, best_rmse_results, results, best_cv_r_results
         
 def seis_aws_ridge(spectra,
                    fmin = 1,
@@ -2617,6 +2640,7 @@ def seis_aws_ridge(spectra,
     results = []
     all_results = []
     best_r_results = []
+    best_cv_r_results = []
 
     # Create Bandwidths
     bands = []
@@ -2654,7 +2678,7 @@ def seis_aws_ridge(spectra,
             Z_X_train, Z_X_test, Z_y_train, Z_y_test = train_test_split(Z_log, aws_values, test_size=0.2,random_state = 42)
             NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(NS_log, aws_values, test_size=0.2,random_state = 42)
             EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_values, test_size=0.2,random_state = 42)
-            
+
             # Scale 
             Z_scaler = StandardScaler()
             NS_scaler = StandardScaler()
@@ -2670,7 +2694,13 @@ def seis_aws_ridge(spectra,
             Z_model = Ridge(alpha=1.0, solver='auto')
             NS_model = Ridge(alpha=1.0, solver='auto')
             EW_model = Ridge(alpha=1.0, solver='auto')
+   
+            # Cross Validation
+            scores_Z = cross_val_score(Z_model, Z_log, aws_values, cv=5, scoring='r2')
+            scores_NS = cross_val_score(NS_model, NS_log, aws_values, cv=5, scoring='r2')
+            scores_EW = cross_val_score(EW_model, EW_log, aws_values, cv=5, scoring='r2')
 
+            # Fit Model
             Z_model.fit(Z_X_train_scaled, Z_y_train)
             NS_model.fit(NS_X_train_scaled, NS_y_train)
             EW_model.fit(EW_X_train_scaled, EW_y_train)
@@ -2698,13 +2728,24 @@ def seis_aws_ridge(spectra,
                 'EW_y_test': EW_y_test,
                 'Z_pred': Z_pred,
                 'NS_pred': NS_pred,
-                'EW_pred': EW_pred})
+                'EW_pred': EW_pred,
+                'Z_cv_r2': scores_Z.mean(),
+                'NS_cv_r2': scores_NS.mean(),
+                'EW_cv_r2': scores_EW.mean(),
+                'avg_cv_r2': (scores_Z.mean() + scores_NS.mean() + scores_EW.mean()) / 3,
+                'Z_cv_std': scores_Z.std(),
+                'NS_cv_std': scores_NS.std(),
+                'EW_cv_std': scores_EW.std(),
+                'avg_cv_std': (scores_Z.std() + scores_NS.std() + scores_EW.std()) / 3 })
         
         # Find best result
         # R²
         best_r_result = max(station_results, key=lambda x: x['avg_r2'])
         best_r_results.append({'station': station, **best_r_result})
-
+        # Cross Validation R²
+        best_cv_r_result = max(station_results, key=lambda x: x['avg_cv_r2'])
+        best_cv_r_results.append({'station': station, **best_cv_r_result})
+    
         # Print best result
         # R²
         print(f"\nBest R² value frequency range for {station}: {best_r_result['fmin']} - {best_r_result['fmax']} Hz")
@@ -2712,7 +2753,13 @@ def seis_aws_ridge(spectra,
         print(f"NS R²: {best_r_result['NS_r2']:.4f}")
         print(f"EW R²: {best_r_result['EW_r2']:.4f}")
         print(f"Average R²: {best_r_result['avg_r2']:.4f}")
-       
+        # Cross Validation R²
+        print(f"\nBest cv R² value frequency range for {station}: {best_cv_r_result['fmin']} - {best_cv_r_result['fmax']} Hz")
+        print(f"Z cv R²: {best_cv_r_result['Z_cv_r2']:.4f} + {best_cv_r_result['Z_cv_std']:.4f}")
+        print(f"NS cv R²: {best_cv_r_result['NS_cv_r2']:.4f} + {best_cv_r_result['NS_cv_std']:.4f}")
+        print(f"EW cv R²: {best_cv_r_result['EW_cv_r2']:.4f} + {best_cv_r_result['EW_cv_std']:.4f}")
+        print(f"Average cv R²: {best_cv_r_result['avg_cv_r2']:.4f}")
+        
         results.append(station_results)
 
         # Plot all average R² and rmse results against centre frequency
@@ -2842,6 +2889,7 @@ def seis_aws_elasticnet(spectra,
     results = []
     all_results = []
     best_r_results = []
+    best_cv_r_results = []
 
     # Create Bandwidths
     bands = []
@@ -2896,6 +2944,11 @@ def seis_aws_elasticnet(spectra,
             NS_model = ElasticNet(alpha=0.08, l1_ratio=0.5).fit(NS_X_train_scaled, NS_y_train)
             EW_model = ElasticNet(alpha=0.08, l1_ratio=0.5).fit(EW_X_train_scaled, EW_y_train)
 
+            # Cross Validation
+            scores_Z = cross_val_score(Z_model, Z_log, aws_values, cv=5, scoring='r2')
+            scores_NS = cross_val_score(NS_model, NS_log, aws_values, cv=5, scoring='r2')
+            scores_EW = cross_val_score(EW_model, EW_log, aws_values, cv=5, scoring='r2')
+
             # Predictions
             Z_pred = Z_model.predict(Z_X_test_scaled)
             NS_pred = NS_model.predict(NS_X_test_scaled)
@@ -2919,13 +2972,24 @@ def seis_aws_elasticnet(spectra,
                 'EW_y_test': EW_y_test,
                 'Z_pred': Z_pred,
                 'NS_pred': NS_pred,
-                'EW_pred': EW_pred})
+                'EW_pred': EW_pred,
+                'Z_cv_r2': scores_Z.mean(),
+                'NS_cv_r2': scores_NS.mean(),
+                'EW_cv_r2': scores_EW.mean(),
+                'avg_cv_r2': (scores_Z.mean() + scores_NS.mean() + scores_EW.mean()) / 3,
+                'Z_cv_std': scores_Z.std(),
+                'NS_cv_std': scores_NS.std(),
+                'EW_cv_std': scores_EW.std(),
+                'avg_cv_std': (scores_Z.std() + scores_NS.std() + scores_EW.std()) / 3 })
         
         # Find best result
         # R²
         best_r_result = max(station_results, key=lambda x: x['avg_r2'])
         best_r_results.append({'station': station, **best_r_result})
-
+        # Cross Validation R²
+        best_cv_r_result = max(station_results, key=lambda x: x['avg_cv_r2'])
+        best_cv_r_results.append({'station': station, **best_cv_r_result})
+    
         # Print best result
         # R²
         print(f"\nBest R² value frequency range for {station}: {best_r_result['fmin']} - {best_r_result['fmax']} Hz")
@@ -2933,7 +2997,13 @@ def seis_aws_elasticnet(spectra,
         print(f"NS R²: {best_r_result['NS_r2']:.4f}")
         print(f"EW R²: {best_r_result['EW_r2']:.4f}")
         print(f"Average R²: {best_r_result['avg_r2']:.4f}")
-    
+        # Cross Validation R²
+        print(f"\nBest cv R² value frequency range for {station}: {best_cv_r_result['fmin']} - {best_cv_r_result['fmax']} Hz")
+        print(f"Z cv R²: {best_cv_r_result['Z_cv_r2']:.4f} + {best_cv_r_result['Z_cv_std']:.4f}")
+        print(f"NS cv R²: {best_cv_r_result['NS_cv_r2']:.4f} + {best_cv_r_result['NS_cv_std']:.4f}")
+        print(f"EW cv R²: {best_cv_r_result['EW_cv_r2']:.4f} + {best_cv_r_result['EW_cv_std']:.4f}")
+        print(f"Average cv R²: {best_cv_r_result['avg_cv_r2']:.4f}")
+        
         results.append(station_results)
 
         # Plot all average R² and rmse results against centre frequency
@@ -3062,6 +3132,7 @@ def seis_aws_svr(spectra,
     results = []
     all_results = []
     best_r_results = []
+    best_cv_r_results = []
 
     # Create Bandwidths
     bands = []
@@ -3116,6 +3187,11 @@ def seis_aws_svr(spectra,
             NS_model = SVR(C=1.0, epsilon=0.2).fit(NS_X_train_scaled, NS_y_train)
             EW_model = SVR(C=1.0, epsilon=0.2).fit(EW_X_train_scaled, EW_y_train)
 
+            # Cross Validation
+            scores_Z = cross_val_score(Z_model, Z_log, aws_values, cv=5, scoring='r2')
+            scores_NS = cross_val_score(NS_model, NS_log, aws_values, cv=5, scoring='r2')
+            scores_EW = cross_val_score(EW_model, EW_log, aws_values, cv=5, scoring='r2')
+
             # Predictions
             Z_pred = Z_model.predict(Z_X_test_scaled)
             NS_pred = NS_model.predict(NS_X_test_scaled)
@@ -3139,13 +3215,25 @@ def seis_aws_svr(spectra,
                 'EW_y_test': EW_y_test,
                 'Z_pred': Z_pred,
                 'NS_pred': NS_pred,
-                'EW_pred': EW_pred})
+                'EW_pred': EW_pred,
+                'Z_cv_r2': scores_Z.mean(),
+                'NS_cv_r2': scores_NS.mean(),
+                'EW_cv_r2': scores_EW.mean(),
+                'avg_cv_r2': (scores_Z.mean() + scores_NS.mean() + scores_EW.mean()) / 3,
+                'Z_cv_std': scores_Z.std(),
+                'NS_cv_std': scores_NS.std(),
+                'EW_cv_std': scores_EW.std(),
+                'avg_cv_std': (scores_Z.std() + scores_NS.std() + scores_EW.std()) / 3 })
+        
         
         # Find best result
         # R²
         best_r_result = max(station_results, key=lambda x: x['avg_r2'])
         best_r_results.append({'station': station, **best_r_result})
-
+        # Cross Validation R²
+        best_cv_r_result = max(station_results, key=lambda x: x['avg_cv_r2'])
+        best_cv_r_results.append({'station': station, **best_cv_r_result})
+    
         # Print best result
         # R²
         print(f"\nBest R² value frequency range for {station}: {best_r_result['fmin']} - {best_r_result['fmax']} Hz")
@@ -3153,6 +3241,12 @@ def seis_aws_svr(spectra,
         print(f"NS R²: {best_r_result['NS_r2']:.4f}")
         print(f"EW R²: {best_r_result['EW_r2']:.4f}")
         print(f"Average R²: {best_r_result['avg_r2']:.4f}")
+        # Cross Validation R²
+        print(f"\nBest cv R² value frequency range for {station}: {best_cv_r_result['fmin']} - {best_cv_r_result['fmax']} Hz")
+        print(f"Z cv R²: {best_cv_r_result['Z_cv_r2']:.4f} + {best_cv_r_result['Z_cv_std']:.4f}")
+        print(f"NS cv R²: {best_cv_r_result['NS_cv_r2']:.4f} + {best_cv_r_result['NS_cv_std']:.4f}")
+        print(f"EW cv R²: {best_cv_r_result['EW_cv_r2']:.4f} + {best_cv_r_result['EW_cv_std']:.4f}")
+        print(f"Average cv R²: {best_cv_r_result['avg_cv_r2']:.4f}")
     
         results.append(station_results)
 
@@ -3283,6 +3377,7 @@ def seis_aws_pca_ridge(spectra,
     results = []
     all_results = []
     best_r_results = []
+    best_cv_r_results = []
 
     # Create Bandwidths
     bands = []
@@ -3347,7 +3442,13 @@ def seis_aws_pca_ridge(spectra,
             Z_model = Ridge(alpha=1.0, solver='auto')
             NS_model = Ridge(alpha=1.0, solver='auto')
             EW_model = Ridge(alpha=1.0, solver='auto')
+            
+            # Cross Validation
+            scores_Z = cross_val_score(Z_model, Z_log, aws_values, cv=5, scoring='r2')
+            scores_NS = cross_val_score(NS_model, NS_log, aws_values, cv=5, scoring='r2')
+            scores_EW = cross_val_score(EW_model, EW_log, aws_values, cv=5, scoring='r2')
 
+            # Fit Model
             Z_model.fit(Z_X_train_pca, Z_y_train)
             NS_model.fit(NS_X_train_pca, NS_y_train)
             EW_model.fit(EW_X_train_pca, EW_y_train)
@@ -3375,13 +3476,24 @@ def seis_aws_pca_ridge(spectra,
                 'EW_y_test': EW_y_test,
                 'Z_pred': Z_pred,
                 'NS_pred': NS_pred,
-                'EW_pred': EW_pred})
+                'EW_pred': EW_pred,
+                'Z_cv_r2': scores_Z.mean(),
+                'NS_cv_r2': scores_NS.mean(),
+                'EW_cv_r2': scores_EW.mean(),
+                'avg_cv_r2': (scores_Z.mean() + scores_NS.mean() + scores_EW.mean()) / 3,
+                'Z_cv_std': scores_Z.std(),
+                'NS_cv_std': scores_NS.std(),
+                'EW_cv_std': scores_EW.std(),
+                'avg_cv_std': (scores_Z.std() + scores_NS.std() + scores_EW.std()) / 3 })
         
         # Find best result
         # R²
         best_r_result = max(station_results, key=lambda x: x['avg_r2'])
         best_r_results.append({'station': station, **best_r_result})
-
+        # Cross Validation R²
+        best_cv_r_result = max(station_results, key=lambda x: x['avg_cv_r2'])
+        best_cv_r_results.append({'station': station, **best_cv_r_result})
+    
         # Print best result
         # R²
         print(f"\nBest R² value frequency range for {station}: {best_r_result['fmin']} - {best_r_result['fmax']} Hz")
@@ -3389,7 +3501,13 @@ def seis_aws_pca_ridge(spectra,
         print(f"NS R²: {best_r_result['NS_r2']:.4f}")
         print(f"EW R²: {best_r_result['EW_r2']:.4f}")
         print(f"Average R²: {best_r_result['avg_r2']:.4f}")
-       
+        # Cross Validation R²
+        print(f"\nBest cv R² value frequency range for {station}: {best_cv_r_result['fmin']} - {best_cv_r_result['fmax']} Hz")
+        print(f"Z cv R²: {best_cv_r_result['Z_cv_r2']:.4f} + {best_cv_r_result['Z_cv_std']:.4f}")
+        print(f"NS cv R²: {best_cv_r_result['NS_cv_r2']:.4f} + {best_cv_r_result['NS_cv_std']:.4f}")
+        print(f"EW cv R²: {best_cv_r_result['EW_cv_r2']:.4f} + {best_cv_r_result['EW_cv_std']:.4f}")
+        print(f"Average cv R²: {best_cv_r_result['avg_cv_r2']:.4f}")
+        
         results.append(station_results)
 
         # Plot all average R² and rmse results against centre frequency

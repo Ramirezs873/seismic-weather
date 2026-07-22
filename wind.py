@@ -3765,11 +3765,13 @@ def full_pca_ridge(spectra,
 
 
 def full_svr(spectra,
-                 fmin = 1,
-                 fmax = 49,
-                 csv = False,
-                 csv_title = 'results',
-                 plot_stat_results = True):
+             fmin = 1,
+             fmax = 49,
+             f_band_width = 1,
+             step_size = 1,
+             csv = False,
+             csv_title = 'results',
+             plot_stat_results = True):
     
     """
     Finds the correlation between seismic data and AWS wind speed 
@@ -3800,6 +3802,12 @@ def full_svr(spectra,
     results = []
     all_results = []
 
+    # Create Bandwidths
+    bands = []
+    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+        f2 = f1 + f_band_width
+        band = (f1, f2)
+        bands.append(band)
 
     # Loop through stations
     for station_dict in spectra:
@@ -3815,20 +3823,27 @@ def full_svr(spectra,
         # Setup results
         station_results = []
 
-        # Apply bandwidths to data
-        band_width = (freq >= fmin) & (freq < fmax)
+        # Setup powers
+        X_Z = np.zeros((len(aws_values), len(bands)))
+        X_NS = np.zeros((len(aws_values), len(bands)))
+        X_EW = np.zeros((len(aws_values), len(bands)))
 
-        # Convert to log to better inspect power scales and apply bandwidth
-        # [:, band_width], select frequencies and slice unwanted freq data from the row
-        # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
-        Z_log = np.log10(Z_power[:, band_width] + 1e-20)
-        NS_log = np.log10(NS_power[:, band_width] + 1e-20)
-        EW_log = np.log10(EW_power[:, band_width] + 1e-20)
+
+        for i, (f1, f2) in enumerate(bands):
+            # Apply bandwidths to data
+            band_width = (freq >= f1) & (freq < f2)
+            # Convert to log to better inspect power scales and apply bandwidth
+                    # [:, band_width], select frequencies and slice unwanted freq data from the row
+                    # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+
     
         # Train Model
-        Z_X_train, Z_X_test, Z_y_train, Z_y_test = train_test_split(Z_log, aws_values, test_size=0.2,random_state = 42)
-        NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(NS_log, aws_values, test_size=0.2,random_state = 42)
-        EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(EW_log, aws_values, test_size=0.2,random_state = 42)
+        Z_X_train, Z_X_test, Z_y_train, Z_y_test = train_test_split(X_Z, aws_values, test_size=0.2,random_state = 42)
+        NS_X_train, NS_X_test, NS_y_train, NS_y_test = train_test_split(X_NS, aws_values, test_size=0.2,random_state = 42)
+        EW_X_train, EW_X_test, EW_y_train, EW_y_test = train_test_split(X_EW, aws_values, test_size=0.2,random_state = 42)
         
         # Pipeline
         # Scale, SVR
@@ -3839,9 +3854,9 @@ def full_svr(spectra,
 
         # Cross Validation
         cv = KFold(n_splits=5, shuffle=True, random_state=42)
-        scores_Z = cross_val_score(Z_model, Z_log, aws_values, cv=cv, scoring='r2')
-        scores_NS = cross_val_score(NS_model, NS_log, aws_values, cv=cv, scoring='r2')
-        scores_EW = cross_val_score(EW_model, EW_log, aws_values, cv=cv, scoring='r2')
+        scores_Z = cross_val_score(Z_model, X_Z, aws_values, cv=cv, scoring='r2')
+        scores_NS = cross_val_score(NS_model, X_NS, aws_values, cv=cv, scoring='r2')
+        scores_EW = cross_val_score(EW_model, X_EW, aws_values, cv=cv, scoring='r2')
 
         # Fit Model
         Z_model.fit(Z_X_train, Z_y_train)
@@ -3864,8 +3879,8 @@ def full_svr(spectra,
 
         # Store results
         station_results.append({
-            'fmin': fmin,
-            'fmax': fmax,
+            'fmin': f1,
+            'fmax': f2,
             'Z_r2': Z_r,
             'NS_r2': NS_r,
             'EW_r2': EW_r,
@@ -3901,15 +3916,18 @@ def full_svr(spectra,
 
         # Plot all average R² and rmse results against centre frequency
         if plot_stat_results == True:
-            
-            
+            band_centres = []
+            for f1, f2 in bands:
+                band_centre = [(f1 + f2)/2]
+                band_centres.append(band_centre)
+
             # R²
             fig, axs = plt.subplots(3, 1, figsize=(10, 10))
-            axs[0].scatter(freq[band_width], Z_importance)
+            axs[0].scatter(band_centres, Z_importance)
             axs[0].set_title('Z')
-            axs[1].scatter(freq[band_width], NS_importance)
+            axs[1].scatter(band_centres, NS_importance)
             axs[1].set_title('NS')
-            axs[2].scatter(freq[band_width], EW_importance)
+            axs[2].scatter(band_centres, EW_importance)
             axs[2].set_title('EW')
 
             plt.suptitle(f'{station}:')

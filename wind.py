@@ -4337,11 +4337,16 @@ def full_rf(spectra,
                 step_size = 1,
                 csv = False,
                 csv_title = 'results',
-                plot_stat_results = True):
+                plot_stat_results = True,
+                plot_results = True,
+                plot_residuals = True,
+                plot_cv = True,
+                plot_power_aws = True,
+                variable_name = 'AWS Wind Speed (m/s)'):
     
     """
-    Finds the correlation between seismic data and AWS wind speed 
-    via a Random Forest Regression. Full inspection.
+    Predicts AWS variable from multiple seismic frequency band power features 
+    using a Random Forest regression model.
 
     Parameters:
         spectra (list):
@@ -4361,6 +4366,14 @@ def full_rf(spectra,
             Title for the output csv file.
         plot_stat_results (bool):
             Plots all the R² and rmse values against frequency bandwidth centres.
+        plot_results (bool):
+            Plots the predicted vs observed values for each seismic component.
+        plot_cv (bool):
+            Plot the cross validation results as boxplots       
+        plot_power_aws (bool):
+            Plot the relationship between seismic power and AWS values.
+        variable_name (str):
+            The name of the variable being predicted (e.g., 'AWS Wind Speed (m/s)').
 
     Outputs:
         results (list):
@@ -4505,16 +4518,116 @@ def full_rf(spectra,
 
             # R²
             fig, axs = plt.subplots(3, 1, figsize=(10, 10))
-            axs[0].scatter(band_centres, Z_importance)
+            axs[0].plot(band_centres, Z_importance)
             axs[0].set_title('Z')
-            axs[1].scatter(band_centres, NS_importance)
+            axs[1].plot(band_centres, NS_importance)
             axs[1].set_title('NS')
-            axs[2].scatter(band_centres, EW_importance)
+            axs[2].plot(band_centres, EW_importance)
             axs[2].set_title('EW')
 
             plt.suptitle(f'{station}:')
             fig.supxlabel('Frequency (Hz)')
             fig.supylabel('RF Permutation Importance')
+            fig.tight_layout()
+
+        if plot_results == True:
+            fig, axs = plt.subplots(3,1, figsize = (10,10))
+            axs[0].scatter(Z_y_test, Z_pred, alpha=0.7)
+            axs[0].plot([Z_y_test.min(), Z_y_test.max()],
+                        [Z_y_test.min(), Z_y_test.max()],
+                        'r--')
+
+            axs[0].set_xlabel(f"Observed {variable_name}")
+            axs[0].set_ylabel(f"Predicted {variable_name}")
+            axs[0].set_title(f"{station} Z")
+
+            axs[1].scatter(NS_y_test, NS_pred, alpha=0.7)
+            axs[1].plot([NS_y_test.min(), NS_y_test.max()],
+                        [NS_y_test.min(), NS_y_test.max()],
+                        'r--')
+            axs[1].set_xlabel(f"Observed {variable_name}")
+            axs[1].set_ylabel(f"Predicted {variable_name}")
+            axs[1].set_title(f"{station} NS")
+
+            axs[2].scatter(EW_y_test, EW_pred, alpha=0.7)
+            axs[2].plot([EW_y_test.min(), EW_y_test.max()],
+                        [EW_y_test.min(), EW_y_test.max()],
+                        'r--')
+            axs[2].set_xlabel(f"Observed {variable_name}")
+            axs[2].set_ylabel(f"Predicted {variable_name}")
+            axs[2].set_title(f"{station} EW")
+            fig.tight_layout()
+
+        if plot_residuals == True:
+            Z_residuals = Z_y_test - Z_pred
+            NS_residuals = NS_y_test - NS_pred
+            EW_residuals = EW_y_test - EW_pred
+
+            fig, axs = plt.subplots(3,1, figsize = (10,10))
+            axs[0].scatter(Z_pred, Z_residuals)
+            axs[0].axhline(0, color='red', linestyle='--')
+            axs[0].set_xlabel(f"Predicted {variable_name}")
+            axs[0].set_ylabel("Residual (Observed - Predicted)")
+            axs[0].set_title(f"Residual Plot for {station}, Z Component")
+
+            axs[1].scatter(NS_pred, NS_residuals)
+            axs[1].axhline(0, color='red', linestyle='--')
+            axs[1].set_xlabel(f"Predicted {variable_name}")
+            axs[1].set_ylabel("Residual (Observed - Predicted)")
+            axs[1].set_title(f"Residual Plot for {station}, NS Component")
+
+            axs[2].scatter(EW_pred, EW_residuals)
+            axs[2].axhline(0, color='red', linestyle='--')
+            axs[2].set_xlabel(f"Predicted {variable_name}")
+            axs[2].set_ylabel("Residual (Observed - Predicted)")
+            axs[2].set_title(f"Residual Plot for {station}, EW Component")
+            fig.tight_layout()
+
+        if plot_cv == True:
+            plt.figure(figsize=(6, 5))
+            plt.boxplot([scores_Z, scores_NS, scores_EW])
+
+            plt.xticks([1, 2, 3], ["Z", "NS", "EW"])
+            plt.ylabel("Cross Validation R²")
+            plt.title(f"{station} Cross Validation Scores")
+
+
+        if plot_power_aws == True:
+
+            # LogSeismic Power vs Predicted AWS  
+
+            # Most important frequency index
+            Z_best = np.argmax(Z_importance)
+            NS_best = np.argmax(NS_importance)
+            EW_best = np.argmax(EW_importance)
+
+            # Best Centre frequencies
+            Z_freq = band_centres[Z_best]
+            NS_freq = band_centres[NS_best]
+            EW_freq = band_centres[EW_best]
+
+            # Create plots
+            fig, axs = plt.subplots(3, 1, figsize=(8, 10))
+
+            # Z
+            axs[0].scatter(Z_X_test[:, Z_best], Z_pred, alpha=0.7)
+            axs[0].set_title(f"Z: {Z_freq[0]:.1f} Hz")
+            axs[0].set_xlabel("Log Seismic Power")
+            axs[0].set_ylabel("Predicted AWS Wind Speed")
+
+            # NS
+            axs[1].scatter(NS_X_test[:, NS_best], NS_pred, alpha=0.7)
+            axs[1].set_title(f"NS: {NS_freq[0]:.1f} Hz")
+            axs[1].set_xlabel("Log Seismic Power")
+            axs[1].set_ylabel("Predicted AWS Wind Speed")
+
+            # EW
+            axs[2].scatter(EW_X_test[:, EW_best], EW_pred, alpha=0.7)
+            axs[2].set_title(f"EW: {EW_freq[0]:.1f} Hz")
+            axs[2].set_xlabel("Log Seismic Power")
+            axs[2].set_ylabel("Predicted AWS Wind Speed")
+
+            plt.tight_layout()
 
         # Save to csv file setup
         if csv == True:

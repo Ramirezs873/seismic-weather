@@ -4661,6 +4661,7 @@ def combined_comp_rf(spectra,
                 fmax = 49,
                 f_band_width = 1,
                 step_size = 1,
+                n_repeats = 3,
                 plot_stat_results = True,
                 plot_results = True,
                 plot_residuals = True,
@@ -4683,6 +4684,8 @@ def combined_comp_rf(spectra,
             Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
         step_size (int):
             Frequency band step size. Set to less than f_band_width for overlapping bands. 
+        n_repeats (int):
+            Number of times to repeat the permutation importance calculation for each seismic component.
         plot_stat_results (bool):
             Plots all the R² and rmse values against frequency bandwidth centres.
         plot_results (bool):
@@ -4701,7 +4704,6 @@ def combined_comp_rf(spectra,
     
     # Setup Result Lists
     results = []
-    all_results = []
 
     # Create Bandwidths
     bands = []
@@ -4770,7 +4772,7 @@ def combined_comp_rf(spectra,
         X_all_r2 = r2_score(y_test, X_all_pred)
 
         # Freq Importance
-        importance = permutation_importance(X_all_model, X_all_test, y_test, n_repeats=3, scoring='r2').importances_mean
+        importance = permutation_importance(X_all_model, X_all_test, y_test, n_repeats=n_repeats, scoring='r2').importances_mean
 
         
         # Store results
@@ -4789,10 +4791,10 @@ def combined_comp_rf(spectra,
         print(f"R²: {X_all_r2:.4f}")
         
         # rmse
-        print(f"Z rmse: {X_all_rmse:.4f}")
+        print(f"rmse: {X_all_rmse:.4f}")
 
         # Cross Validation R²
-        print(f"Z cv R²: {scores.mean():.4f} + {scores.std():.4f}")
+        print(f"cv R²: {scores.mean():.4f} + {scores.std():.4f}")
         results.append(station_results)
 
         # Plot all average R² and rmse results against centre frequency
@@ -4875,7 +4877,7 @@ def combined_comp_rf(spectra,
             freq = band_centres[best_index]
             # Create plots
             
-            plt.scatter(best_X, y_test, alpha=0.7)
+            plt.scatter(best_X, X_all_pred, alpha=0.7)
             plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz")
             plt.xlabel("Log Seismic Power")
             plt.ylabel("Predicted AWS Wind Speed")

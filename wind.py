@@ -2244,6 +2244,7 @@ def seis_aws_fft_cor(spectra,
                 NS_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(aws_array, NS_mask)
                 NS_r_sq = NS_model.score(aws_array, NS_mask)
                 
+
                 EW_model = make_pipeline(PolynomialFeatures(degree=2), LinearRegression()).fit(aws_array, EW_mask)
                 EW_r_sq = EW_model.score(aws_array, EW_mask)
 
@@ -4652,5 +4653,256 @@ def full_rf(spectra,
         df.to_csv(csv_name, index=False)
         print(f"Results saved to {csv_name}")
                                 
+    return results
+        
+
+def combined_comp_rf(spectra,
+                fmin = 1,
+                fmax = 49,
+                f_band_width = 1,
+                step_size = 1,
+                plot_stat_results = True,
+                plot_results = True,
+                plot_residuals = True,
+                plot_power_aws = True,
+                variable_name = 'AWS Wind Speed (m/s)'):
+    
+    """
+    Predicts AWS variable from multiple seismic frequency band power features 
+    using a Random Forest regression model. Combines all seismic components into one model.
+
+    Parameters:
+        spectra (list):
+            A list of dictionaries containing the frequency, power, and aws data 
+            for each seismic component (EW, NS, Z) for each station and time period.
+        fmin (int):
+            Minimum frequency value for calculating the power of each bandwidths.
+        fmax (int):
+            Maximum frequency value for calculating the power of each  bandwidths.
+        f_band_width (int):
+            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+        step_size (int):
+            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+        plot_stat_results (bool):
+            Plots all the R² and rmse values against frequency bandwidth centres.
+        plot_results (bool):
+            Plots the predicted vs observed values for each seismic component.
+        plot_cv (bool):
+            Plot the cross validation results as boxplots       
+        plot_power_aws (bool):
+            Plot the relationship between seismic power and AWS values.
+        variable_name (str):
+            The name of the variable being predicted (e.g., 'AWS Wind Speed (m/s)').
+
+    Outputs:
+        results (list):
+            A list of dictionaries containing information about all the correlation results for each station.
+    """
+    
+    # Setup Result Lists
+    results = []
+    all_results = []
+
+    # Create Bandwidths
+    bands = []
+    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+        f2 = f1 + f_band_width
+        band = (f1, f2)
+        bands.append(band)
+
+    n_bands = len(bands)
+
+    # Loop through stations
+    for station_dict in spectra:
+
+        # Setup Variables
+        station = list(station_dict.keys())[0] 
+        EW_power = station_dict[station][0]['EW']
+        NS_power = station_dict[station][0]['NS']
+        Z_power = station_dict[station][0]['Z']
+        freq = station_dict[station][0]['freq']
+        aws_values = station_dict[station][0]['aws_values']
+
+        # Setup results
+        station_results = []
+        
+        # Setup powers
+        X_Z = np.zeros((len(aws_values), len(bands)))
+        X_NS = np.zeros((len(aws_values), len(bands)))
+        X_EW = np.zeros((len(aws_values), len(bands)))
+
+        # Apply bandwidths to data
+        for i, (f1,f2) in enumerate(bands):
+            band_width = (freq >= f1) & (freq < f2)
+
+            # Convert to log to better inspect power scales and apply bandwidth
+            # [:, band_width], select frequencies and slice unwanted freq data from the row
+            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+
+
+        X_all = np.column_stack([X_Z, X_NS, X_EW])
+
+
+        # Train Model
+        X_all_train, X_all_test, y_train, y_test = train_test_split(X_all, aws_values, test_size=0.2, random_state=42)
+
+        # Define Random Forest Model
+        X_all_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
+        
+        # Cross Validation
+        cv = KFold(n_splits=5, shuffle=True, random_state=42)
+        scores = cross_val_score(X_all_model, X_all, aws_values, cv=cv, scoring='r2')
+
+        # Fit Model
+        X_all_model.fit(X_all_train, y_train)
+
+        # Predictions
+        X_all_pred = X_all_model.predict(X_all_test)
+
+        # rmse
+        X_all_rmse = np.sqrt(mean_squared_error(y_test, X_all_pred))
+        
+
+        # R²
+        X_all_r2 = r2_score(y_test, X_all_pred)
+
+        # Freq Importance
+        importance = permutation_importance(X_all_model, X_all_test, y_test, n_repeats=3, scoring='r2').importances_mean
+
+        
+        # Store results
+        station_results.append({
+            'fmin': fmin,
+            'fmax': fmax,
+            'r2': X_all_r2,
+            'rmse': X_all_rmse,
+            'y_test': y_test,
+            'X_all_pred': X_all_pred,
+            'cv_r2': scores.mean(),
+            'cv_std': scores.std()}) 
+        
+        # Print best result
+        # R²
+        print(f"R²: {X_all_r2:.4f}")
+        
+        # rmse
+        print(f"Z rmse: {X_all_rmse:.4f}")
+
+        # Cross Validation R²
+        print(f"Z cv R²: {scores.mean():.4f} + {scores.std():.4f}")
+        results.append(station_results)
+
+        # Plot all average R² and rmse results against centre frequency
+        if plot_stat_results == True:
+            band_centres = []
+            for f1, f2 in bands:
+                band_centre = [(f1 + f2)/2]
+                band_centres.append(band_centre)
+
+            Z_importance = importance[:n_bands]
+            NS_importance = importance[n_bands:2*n_bands]
+            EW_importance = importance[2*n_bands:3*n_bands]
+            plt.figure(figsize=(10, 6))
+
+            plt.plot(band_centres, Z_importance, label="Z")
+            plt.plot(band_centres, NS_importance, label="NS")
+            plt.plot(band_centres, EW_importance, label="EW")
+
+            plt.xlabel("Frequency (Hz)")
+            plt.ylabel("RF Permutation Importance")
+            plt.title(f"{station}: Combined RF Spectrum")
+            plt.legend()
+
+            plt.tight_layout()
+
+        if plot_results == True:
+            plt.figure(figsize=(10, 6))
+
+            plt.scatter(y_test, X_all_pred, alpha=0.7)
+
+            plt.plot([y_test.min(), y_test.max()],
+                     [y_test.min(), y_test.max()],
+                     'r--')
+
+            plt.xlabel(f"Observed {variable_name}")
+            plt.ylabel(f"Predicted {variable_name}")
+            plt.title(f"{station}")
+            plt.tight_layout()
+
+        if plot_residuals == True:
+            plt.figure(figsize=(10, 6))
+
+            residuals = y_test - X_all_pred
+
+            plt.scatter(X_all_pred, residuals)
+            plt.axhline(0, color='red', linestyle='--')
+            plt.xlabel(f"Predicted {variable_name}")
+            plt.ylabel("Residual (Observed - Predicted)")
+            plt.title(f"Residual Plot for {station}, Combined RF Model")
+            plt.tight_layout()
+
+
+        if plot_power_aws == True:
+
+            # LogSeismic Power vs Predicted AWS  
+            plt.figure(figsize=(10, 6))
+
+            # Most important frequency index
+            best = np.argmax(importance)
+
+            if best < n_bands:
+
+                best_component = "Z"
+                best_index = best
+                best_X = X_all_test[:, best]
+
+            elif best < 2*n_bands:
+
+                best_component = "NS"
+                best_index = best - n_bands
+                best_X = X_all_test[:, best]
+
+            else:
+
+                best_component = "EW"
+                best_index = best - 2*n_bands
+                best_X = X_all_test[:, best]
+
+            # Best Centre frequencies
+            freq = band_centres[best_index]
+            # Create plots
+            
+            plt.scatter(best_X, y_test, alpha=0.7)
+            plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz")
+            plt.xlabel("Log Seismic Power")
+            plt.ylabel("Predicted AWS Wind Speed")
+
+            plt.tight_layout()
+
+        # Find best 5 frequency bands for each component     
+        top_five = np.argsort(importance)[::-1][:10]
+
+        for index in top_five:
+
+            if index < n_bands:
+                component = "Z"
+                freq_index = index
+
+            elif index < 2 * n_bands:
+                component = "NS"
+                freq_index = index - n_bands
+
+            else:
+                component = "EW"
+                freq_index = index - 2 * n_bands
+
+            frequency = band_centres[freq_index]
+
+            print(f"{component}: {frequency[0]:.1f} Hz, importance = {importance[index]:.4f}")
+
+
     return results
         

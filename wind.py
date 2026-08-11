@@ -5266,6 +5266,7 @@ def WS_WD_rf(spectra,
                 f_band_width = 1,
                 step_size = 1,
                 n_repeats = 3,
+                min_WS = None,
                 plot_stat_results = True,
                 plot_results = True,
                 plot_residuals = True,
@@ -5393,6 +5394,25 @@ def WS_WD_rf(spectra,
         y_sin_test = y_all_test[:, 1]
         y_cos_test = y_all_test[:, 2]
 
+        if min_WS is not None:
+
+            mask = y_var_test >= min_WS
+
+            var_pred = var_pred[mask]
+            sin_pred = sin_pred[mask]
+            cos_pred = cos_pred[mask]
+
+            y_var_test = y_var_test[mask]
+            y_sin_test = y_sin_test[mask]
+            y_cos_test = y_cos_test[mask]
+
+            X_all_test = X_all_test[mask]
+
+        else:
+
+            X_all_test = X_all_test
+
+
         # Predicted direction
         dir_pred_radian = np.arctan2(sin_pred, cos_pred)
         dir_pred = np.rad2deg(dir_pred_radian)
@@ -5487,40 +5507,45 @@ def WS_WD_rf(spectra,
 
             fig, ax = plt.subplots(2, 3, figsize=(10, 10))
             ax[0, 0].plot(band_centres, Z_var_importance)
-            ax[0, 0].set_title(f'Z {variable_name} Importance')
+            ax[0, 0].set_title(f'Z {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[0, 0].set_ylim(top=1)
             ax[0, 1].plot(band_centres, NS_var_importance)
-            ax[0, 1].set_title(f'NS {variable_name} Importance')
+            ax[0, 1].set_title(f'NS {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[0, 1].set_ylim(top=1)
             ax[0, 2].plot(band_centres, EW_var_importance)
-            ax[0, 2].set_title(f'EW {variable_name} Importance')
+            ax[0, 2].set_title(f'EW {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[0, 2].set_ylim(top=1)
             ax[1, 0].plot(band_centres, Z_dir_importance)
-            ax[1, 0].set_title('Combined Z Wind Direction Importance')
+            ax[1, 0].set_title(f'Combined Z Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[1, 0].set_ylim(top=1)
             ax[1, 1].plot(band_centres, NS_dir_importance)
-            ax[1, 1].set_title('Combined NS Wind Direction Importance')
+            ax[1, 1].set_title(f'Combined NS Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[1, 1].set_ylim(top=1)
             ax[1, 2].plot(band_centres, EW_dir_importance)
-            ax[1, 2].set_title('Combined EW Wind Direction Importance')
+            ax[1, 2].set_title(f'Combined EW Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[1, 2].set_ylim(top=1)
 
-            plt.suptitle(f'{station}:')
+            fig.suptitle(f'{station}:')
             fig.supxlabel('Frequency (Hz)')
             fig.supylabel('RF Permutation Importance')
             fig.tight_layout()
 
-            plt.tight_layout()
 
         if plot_results == True:
 
-            fig = plt.figure(figsize=(12, 10))
+            plt.figure(figsize=(8, 8))
 
             # AWS Variable
 
-            cart_ax = fig.add_subplot(3,1,1)
-
-            cart_ax.scatter(y_var_test, var_pred, alpha=0.7)
-            cart_ax.plot([y_var_test.min(), y_var_test.max()],
+            plt.scatter(y_var_test, var_pred, alpha=0.7)
+            plt.plot([y_var_test.min(), y_var_test.max()],
                     [y_var_test.min(), y_var_test.max()],
                     'r--')
-            cart_ax.set_xlabel(f"Observed {variable_name}")
-            cart_ax.set_ylabel(f"Predicted {variable_name}")
-            cart_ax.set_title(f"{station} {variable_name}")
+            plt.xlabel(f"Observed {variable_name}")
+            plt.ylabel(f"Predicted {variable_name}")
+            plt.title(f"{station} {variable_name}")
+
+            plt.tight_layout()
 
             # Wind direction
             cardinals = {
@@ -5529,20 +5554,19 @@ def WS_WD_rf(spectra,
                         "W": (np.pi),
                         "S": (3 * np.pi / 2)}
         
-
-            
-                            
-            polar_ax1 = fig.add_subplot(3,1,2, projection = 'polar')
-            polar_ax1.scatter(dir_test_radian, np.ones(len(dir_test_radian)) * 0.8, alpha=0.7, label = 'Observed Wind Direction')
-            polar_ax1.scatter(dir_pred_radian, np.ones(len(dir_test_radian)) * 0.85, alpha=0.7, label = 'Predicted Wind Direction')
-            polar_ax1.set_theta_zero_location('N')
-            polar_ax1.set_theta_direction(-1)
-            polar_ax1.set_title(f"{station} Wind Direction", pad = 50)
-            polar_ax1.set_rmax(1)
+            plt.figure(figsize=(10, 6))
+            plt.polar()      
+            plt.scatter(dir_test_radian, np.ones(len(dir_test_radian)) * 0.8, alpha=0.7, label = 'Observed Wind Direction')
+            plt.scatter(dir_pred_radian, np.ones(len(dir_test_radian)) * 0.85, alpha=0.7, label = 'Predicted Wind Direction')
+            plt.gca().set_theta_zero_location('N')
+            plt.gca().set_theta_direction(-1)
+            plt.title(f"{station} Wind Direction", pad = 50)
+            plt.gca().set_rlabel_position(0)
+            plt.ylim(0,1)
             for label, angle in cardinals.items():
-                            polar_ax1.text(
+                            plt.text(
                                 angle,
-                                1.5,
+                                1.2,
                                 label,
                                 ha="center",
                                 va="center",
@@ -5550,31 +5574,34 @@ def WS_WD_rf(spectra,
                                 fontweight="bold",
                                 clip_on=False)
                             
-            polar_ax1.legend(loc = 'upper right', bbox_to_anchor = (2.3, 1.1))
+            plt.legend(loc = 'upper right', bbox_to_anchor = (1.4, 1.1))
             
+            plt.tight_layout()
 
             # AWS Variable and Wind direction
-            polar_ax2 = fig.add_subplot(3,1,3, projection = 'polar')
-            polar_ax2.scatter(dir_test_radian, y_var_test, alpha=0.7, label = f'Observed {variable_name}')
-            polar_ax2.scatter(dir_pred_radian, var_pred, alpha=0.7, label = f'Predicted {variable_name}')
-            polar_ax2.set_theta_zero_location('N')
-            polar_ax2.set_theta_direction(-1)
-            polar_ax2.set_ylabel(f'{variable_name}', labelpad=50)
-            polar_ax2.set_title(f"{station}: {variable_name} and Wind Direction", pad = 50)
-            rmax = polar_ax2.get_rmax()
+            plt.figure(figsize=(10, 6))
+            plt.polar()
+            plt.scatter(dir_test_radian, y_var_test, alpha=0.7, label = f'Observed {variable_name}')
+            plt.scatter(dir_pred_radian, var_pred, alpha=0.7, label = f'Predicted {variable_name}')
+            plt.gca().set_theta_zero_location('N')
+            plt.gca().set_theta_direction(-1)
+            plt.ylabel(f'{variable_name}', labelpad=50)
+            plt.title(f"{station}: {variable_name} and Wind Direction", pad = 50)
+            plt.gca().set_rlabel_position(0)
+            rmax = plt.gca().get_rmax()
             for label, angle in cardinals.items():
-                            polar_ax2.text(
+                            plt.text(
                                 angle,
-                                rmax * 1.5,
+                                rmax * 1.2,
                                 label,
                                 ha="center",
                                 va="center",
                                 fontsize=12,
                                 fontweight="bold",
                                 clip_on=False)
-            polar_ax2.legend(loc = 'upper right', bbox_to_anchor = (2.8, 1.1)) 
+            plt.legend(loc = 'upper right', bbox_to_anchor = (1.5, 1.1)) 
 
-            fig.tight_layout()
+            plt.tight_layout()
 
         if plot_residuals == True:
 
@@ -5658,4 +5685,3 @@ def WS_WD_rf(spectra,
 
 
     return results
-        

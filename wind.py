@@ -5260,7 +5260,7 @@ def var_dir_rf(spectra,
 
     return results
 
-def var_dir_rf2(spectra,
+def WS_WD_rf(spectra,
                 fmin = 1,
                 fmax = 49,
                 f_band_width = 1,
@@ -5280,7 +5280,7 @@ def var_dir_rf2(spectra,
 
     Parameters:
         spectra (list):
-            A list of dictionaries containing the frequency, power, and aws data 
+            A list of dictionaries containing the frequency, power, and Wind Speed data 
             for each seismic component (EW, NS, Z) for each station and time period.
         fmin (int):
             Minimum frequency value for calculating the power of each bandwidths.
@@ -5319,6 +5319,11 @@ def var_dir_rf2(spectra,
         bands.append(band)
 
     n_bands = len(bands)
+
+    band_centres = []
+    for f1, f2 in bands:
+        band_centre = [(f1 + f2)/2]
+        band_centres.append(band_centre)
 
     # Loop through stations
     for station_dict in spectra:
@@ -5394,7 +5399,8 @@ def var_dir_rf2(spectra,
         dir_pred = dir_pred % 360
 
         # Fix angles near end points
-        dir_test = np.rad2deg(np.arctan2(y_sin_test, y_cos_test)) % 360
+        dir_test_radian = np.arctan2(y_sin_test, y_cos_test)
+        dir_test = np.rad2deg(dir_test_radian) % 360
         dir_fix = np.abs((dir_pred - dir_test + 180) % 360 - 180)
         
         # Mean direction
@@ -5459,9 +5465,9 @@ def var_dir_rf2(spectra,
         print(f"Cos rmse: {cos_rmse:.4f}")
 
         # Cross Validation R²
-        print(f"cv R²: {var_scores.mean():.4f} +/- {var_scores.std():.4f}")
-        print(f"cv R²: {sin_scores.mean():.4f} +/- {sin_scores.std():.4f}")
-        print(f"cv R²: {cos_scores.mean():.4f} +/- {cos_scores.std():.4f}")
+        print(f"{variable_name} cv R²: {var_scores.mean():.4f} +/- {var_scores.std():.4f}")
+        print(f"Sin cv R²: {sin_scores.mean():.4f} +/- {sin_scores.std():.4f}")
+        print(f"Cos cv R²: {cos_scores.mean():.4f} +/- {cos_scores.std():.4f}")
         results.append(station_results)
 
         # WS
@@ -5469,10 +5475,7 @@ def var_dir_rf2(spectra,
         print(f"Wind direction RMSE: {dir_rmse:.2f}°")
         # Plot all average R² and rmse results against centre frequency
         if plot_stat_results == True:
-            band_centres = []
-            for f1, f2 in bands:
-                band_centre = [(f1 + f2)/2]
-                band_centres.append(band_centre)
+            
             # AWS Variable
             Z_var_importance = var_importance[:n_bands]
             NS_var_importance = var_importance[n_bands:2*n_bands]
@@ -5505,28 +5508,71 @@ def var_dir_rf2(spectra,
 
         if plot_results == True:
 
-            fig, ax = plt.subplots(1, 3, figsize=(15, 5))
-            ax[0].scatter(y_var_test, var_pred, alpha=0.7)
-            ax[0].plot([y_var_test.min(), y_var_test.max()],
-                     [y_var_test.min(), y_var_test.max()],
-                     'r--')
-            ax[0].set_xlabel(f"Observed {variable_name}")
-            ax[0].set_ylabel(f"Predicted {variable_name}")
-            ax[0].set_title(f"{station} {variable_name}")
-            ax[1].scatter(y_sin_test, sin_pred, alpha=0.7)
-            ax[1].plot([y_sin_test.min(), y_sin_test.max()],
-                     [y_sin_test.min(), y_sin_test.max()],
-                     'r--')
-            ax[1].set_xlabel("Observed Wind Direction Sin")
-            ax[1].set_ylabel("Predicted Wind Direction Sin")
-            ax[1].set_title(f"{station} Wind Direction Sin")
-            ax[2].scatter(y_cos_test, cos_pred, alpha=0.7)
-            ax[2].plot([y_cos_test.min(), y_cos_test.max()],
-                     [y_cos_test.min(), y_cos_test.max()],
-                     'r--')
-            ax[2].set_xlabel("Observed Wind Direction Cos")
-            ax[2].set_ylabel("Predicted Wind Direction Cos")
-            ax[2].set_title(f"{station} Wind Direction Cos")
+            fig = plt.figure(figsize=(12, 10))
+
+            # AWS Variable
+
+            cart_ax = fig.add_subplot(3,1,1)
+
+            cart_ax.scatter(y_var_test, var_pred, alpha=0.7)
+            cart_ax.plot([y_var_test.min(), y_var_test.max()],
+                    [y_var_test.min(), y_var_test.max()],
+                    'r--')
+            cart_ax.set_xlabel(f"Observed {variable_name}")
+            cart_ax.set_ylabel(f"Predicted {variable_name}")
+            cart_ax.set_title(f"{station} {variable_name}")
+
+            # Wind direction
+            cardinals = {
+                        "E": 0,
+                        "N": (np.pi / 2),
+                        "W": (np.pi),
+                        "S": (3 * np.pi / 2)}
+        
+
+            
+                            
+            polar_ax1 = fig.add_subplot(3,1,2, projection = 'polar')
+            polar_ax1.scatter(dir_test_radian, np.ones(len(dir_test_radian)) * 0.8, alpha=0.7, label = 'Observed Wind Direction')
+            polar_ax1.scatter(dir_pred_radian, np.ones(len(dir_test_radian)) * 0.85, alpha=0.7, label = 'Predicted Wind Direction')
+            polar_ax1.set_theta_zero_location('N')
+            polar_ax1.set_theta_direction(-1)
+            polar_ax1.set_title(f"{station} Wind Direction", pad = 50)
+            polar_ax1.set_rmax(1)
+            for label, angle in cardinals.items():
+                            polar_ax1.text(
+                                angle,
+                                1.5,
+                                label,
+                                ha="center",
+                                va="center",
+                                fontsize=12,
+                                fontweight="bold",
+                                clip_on=False)
+                            
+            polar_ax1.legend(loc = 'upper right', bbox_to_anchor = (2.3, 1.1))
+            
+
+            # AWS Variable and Wind direction
+            polar_ax2 = fig.add_subplot(3,1,3, projection = 'polar')
+            polar_ax2.scatter(dir_test_radian, y_var_test, alpha=0.7, label = f'Observed {variable_name}')
+            polar_ax2.scatter(dir_pred_radian, var_pred, alpha=0.7, label = f'Predicted {variable_name}')
+            polar_ax2.set_theta_zero_location('N')
+            polar_ax2.set_theta_direction(-1)
+            polar_ax2.set_ylabel(f'{variable_name}', labelpad=50)
+            polar_ax2.set_title(f"{station}: {variable_name} and Wind Direction", pad = 50)
+            rmax = polar_ax2.get_rmax()
+            for label, angle in cardinals.items():
+                            polar_ax2.text(
+                                angle,
+                                rmax * 1.5,
+                                label,
+                                ha="center",
+                                va="center",
+                                fontsize=12,
+                                fontweight="bold",
+                                clip_on=False)
+            polar_ax2.legend(loc = 'upper right', bbox_to_anchor = (2.8, 1.1)) 
 
             fig.tight_layout()
 

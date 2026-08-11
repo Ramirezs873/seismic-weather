@@ -5267,6 +5267,7 @@ def WS_WD_rf(spectra,
                 step_size = 1,
                 n_repeats = 3,
                 min_WS = None,
+                poly_degree = 2,
                 plot_stat_results = True,
                 plot_results = True,
                 plot_residuals = True,
@@ -5293,6 +5294,10 @@ def WS_WD_rf(spectra,
             Frequency band step size. Set to less than f_band_width for overlapping bands. 
         n_repeats (int):
             Number of times to repeat the permutation importance calculation for each seismic component.
+        min_WS (int):
+            Minimum wind speed (km/hr) to be considered in analysis.
+        poly_degree (int):
+            Polynomial degree for the regression in plot_power_aws (Seis Power vs Obs WS)
         plot_stat_results (bool):
             Plots all the R² and rmse values against frequency bandwidth centres.
         plot_results (bool):
@@ -5491,7 +5496,7 @@ def WS_WD_rf(spectra,
         results.append(station_results)
 
         # WS
-        print(f"Wind direction Mean: {dir_mean:.2f}°")
+        print(f"Wind direction Mean Error: {dir_mean:.2f}°")
         print(f"Wind direction RMSE: {dir_rmse:.2f}°")
         # Plot all average R² and rmse results against centre frequency
         if plot_stat_results == True:
@@ -5537,13 +5542,15 @@ def WS_WD_rf(spectra,
 
             # AWS Variable
 
-            plt.scatter(y_var_test, var_pred, alpha=0.7)
+            plt.scatter(y_var_test, var_pred, alpha=0.7, s = 100)
             plt.plot([y_var_test.min(), y_var_test.max()],
                     [y_var_test.min(), y_var_test.max()],
-                    'r--')
-            plt.xlabel(f"Observed {variable_name}")
-            plt.ylabel(f"Predicted {variable_name}")
-            plt.title(f"{station} {variable_name}")
+                    'r--', linewidth = 4)
+            plt.xlabel(f"Observed {variable_name}", fontsize = 20)
+            plt.ylabel(f"Predicted {variable_name}", fontsize = 20)
+            plt.title(f"{station} {variable_name}", fontsize = 20)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
 
             plt.tight_layout()
 
@@ -5627,9 +5634,8 @@ def WS_WD_rf(spectra,
         if plot_power_aws == True:
 
             # LogSeismic Power vs Predicted AWS  
-            plt.figure(figsize=(10, 6))
 
-            # Most important frequency index
+            # Best frequency index
             var_best = np.argmax(var_importance)
 
             if var_best < n_bands:
@@ -5652,15 +5658,45 @@ def WS_WD_rf(spectra,
 
             # Best Centre frequencies
             freq = band_centres[best_index]
+
+            # Sort for plot
+            idx = np.argsort(best_var)
+            x_sort = best_var[idx]
+
+            # Polynomial 
+            # Reshape x values
+            poly_x = best_var.reshape(-1,1)
+            # Create Pipeline 
+            poly = make_pipeline(PolynomialFeatures(degree=poly_degree), LinearRegression()).fit(poly_x, y_var_test)
+            # Calculate R² 
+            poly_r2 = poly.score(poly_x, y_var_test)
+            # Predict
+            poly_pred = poly.predict(poly_x)[idx]
+            # Coefficients
+            linear_model = poly.named_steps['linearregression']
+            coefficients = linear_model.coef_
+            intercept = linear_model.intercept_
+            # Equation
+            if poly_degree == 1:
+                equation = f"y = {coefficients[1]:.2f}x + {intercept:2f}"
+            elif poly_degree == 2:
+                equation = f"y = {coefficients[2]:.2f}x$^{2}$ + {coefficients[1]:.2f}x + {intercept:.2f}"
+            else:
+                print('Calculation only for poly_degree = 1 or 2')
+                equation = 'Equation not calculated'
+
             # Create plots
-            
-            plt.scatter(best_var, var_pred, alpha=0.7)
-            plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz")
-            plt.xlabel("Log Seismic Power")
-            plt.ylabel(f"Predicted {variable_name}")
+            plt.figure(figsize=(12,10))
+            plt.scatter(best_var, y_var_test, alpha=0.7, s = 100)
+            plt.plot(x_sort, poly_pred, 'r--', linewidth = 4, label = f'{equation} \nR² = {poly_r2:.2f}')
+            plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz", fontsize = 20)
+            plt.legend(fontsize = 20)
+            plt.xlabel("Log Seismic Power", fontsize = 20)
+            plt.ylabel(f"Observed {variable_name}", fontsize = 20)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
 
             plt.tight_layout()
-
 
         # Find best 5 frequency bands for each component     
         top_ten = np.argsort(var_importance)[::-1][:10]

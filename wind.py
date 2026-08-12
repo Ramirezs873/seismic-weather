@@ -25,6 +25,7 @@ from sklearn.svm import SVR
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.inspection import permutation_importance
+import matplotlib
 
 def read_data(path, 
               station_code, 
@@ -5260,6 +5261,7 @@ def var_dir_rf(spectra,
 
     return results
 
+
 def WS_WD_rf(spectra,
                 fmin = 1,
                 fmax = 49,
@@ -5586,18 +5588,47 @@ def WS_WD_rf(spectra,
             plt.tight_layout()
 
             # AWS Variable and Wind direction
-            plt.figure(figsize=(10, 6))
+
+            # Best frequency index
+            var_best = np.argmax(var_importance)
+
+            if var_best < n_bands:
+
+                best_component = "Z"
+                best_index = var_best
+                best_var = X_all_test[:, var_best]
+
+            elif var_best < 2*n_bands:
+
+                best_component = "NS"
+                best_index = var_best - n_bands
+                best_var = X_all_test[:, var_best]
+
+            else:
+
+                best_component = "EW"
+                best_index = var_best - 2*n_bands
+                best_var = X_all_test[:, var_best]
+            
+            plt.figure(figsize=(10,6))
+            ax = plt.subplot(projection='polar')
+
             plt.polar()
-            plt.scatter(dir_test_radian, y_var_test, alpha=0.7, label = f'Observed {variable_name}')
-            plt.scatter(dir_pred_radian, var_pred, alpha=0.7, label = f'Predicted {variable_name}')
-            plt.gca().set_theta_zero_location('N')
-            plt.gca().set_theta_direction(-1)
-            plt.ylabel(f'{variable_name}', labelpad=50)
-            plt.title(f"{station}: {variable_name} and Wind Direction", pad = 50)
-            plt.gca().set_rlabel_position(0)
-            rmax = plt.gca().get_rmax()
+            power_colours = best_var
+
+            cmap = matplotlib.cm.get_cmap('plasma')
+            new_cmap = matplotlib.colors.LinearSegmentedColormap.from_list('snipped_cmap', cmap(np.linspace(0, 0.90, 256)))
+
+            obs = ax.scatter(dir_test_radian, y_var_test, alpha=0.7, c=power_colours, cmap=new_cmap, label = f'Observed {variable_name}', marker='x')
+            pred = ax.scatter(dir_pred_radian, var_pred, alpha=0.7, c=power_colours, cmap=new_cmap, label = f'Predicted {variable_name}', marker='^')
+            ax.set_theta_zero_location('N')
+            ax.set_theta_direction(-1)
+            ax.set_ylabel(f'{variable_name}', labelpad=50)
+            ax.set_title(f"{station}: {variable_name} and Wind Direction", pad = 50)
+            ax.set_rlabel_position(0)
+            rmax = ax.get_rmax()
             for label, angle in cardinals.items():
-                            plt.text(
+                            ax.text(
                                 angle,
                                 rmax * 1.2,
                                 label,
@@ -5606,7 +5637,10 @@ def WS_WD_rf(spectra,
                                 fontsize=12,
                                 fontweight="bold",
                                 clip_on=False)
-            plt.legend(loc = 'upper right', bbox_to_anchor = (1.5, 1.1)) 
+            plt.legend(loc = 'upper right', bbox_to_anchor = (1.5, 1.3)) 
+
+            cbar = plt.colorbar(obs, ax=ax, pad=0.1)
+            cbar.set_label(f'Log Seismic Power\n{best_component}, {freq[0]:.1f} Hz')
 
             plt.tight_layout()
 

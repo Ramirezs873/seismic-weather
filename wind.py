@@ -5609,7 +5609,10 @@ def WS_WD_rf(spectra,
                 best_component = "EW"
                 best_index = var_best - 2*n_bands
                 best_var = X_all_test[:, var_best]
-            
+
+            # Best Centre frequencies
+            freq_best = band_centres[best_index]
+
             plt.figure(figsize=(10,6))
             ax = plt.subplot(projection='polar')
 
@@ -5640,7 +5643,7 @@ def WS_WD_rf(spectra,
             plt.legend(loc = 'upper right', bbox_to_anchor = (1.5, 1.3)) 
 
             cbar = plt.colorbar(obs, ax=ax, pad=0.1)
-            cbar.set_label(f'Log Seismic Power\n{best_component}, {freq[0]:.1f} Hz')
+            cbar.set_label(f'Log Seismic Power\n{best_component}, {freq_best[0]:.1f} Hz')
 
             plt.tight_layout()
 

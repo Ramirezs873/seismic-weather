@@ -5319,15 +5319,16 @@ def WS_WD_rf(spectra,
     # Setup Result Lists
     results = []
 
+    # Bands
     # Create Bandwidths
     bands = []
     for f1 in range(fmin, fmax - f_band_width + 1, step_size):
         f2 = f1 + f_band_width
         band = (f1, f2)
         bands.append(band)
-
+    # Num of Bands
     n_bands = len(bands)
-
+    # Create Band Centers
     band_centres = []
     for f1, f2 in bands:
         band_centre = [(f1 + f2)/2]
@@ -5344,7 +5345,6 @@ def WS_WD_rf(spectra,
         freq = station_dict[station][0]['freq']
         aws_values = station_dict[station][0]['aws_values']
         wind_direction = station_dict[station][0]['wind_direction']
-
         dir_radians = np.deg2rad(wind_direction)
         dir_sin = np.sin(dir_radians)
         dir_cos = np.cos(dir_radians)
@@ -5368,7 +5368,7 @@ def WS_WD_rf(spectra,
             X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
             X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
 
-
+        # Stack all together to process all together as a larger dataset
         X_all = np.column_stack([X_Z, X_NS, X_EW])
         y_all = np.column_stack([aws_values, dir_sin, dir_cos])
 
@@ -5401,6 +5401,7 @@ def WS_WD_rf(spectra,
         y_sin_test = y_all_test[:, 1]
         y_cos_test = y_all_test[:, 2]
 
+        # Apply minimum WS threshold
         if min_WS is not None:
 
             mask = y_var_test >= min_WS
@@ -5426,11 +5427,6 @@ def WS_WD_rf(spectra,
             masked_X_all = X_all_test[~mask]
             X_all_test = X_all_test[mask]
 
-        else:
-
-            X_all_test = X_all_test
-
-
         # Predicted direction
         dir_pred_radian = np.arctan2(sin_pred, cos_pred)
         dir_pred = np.rad2deg(dir_pred_radian)
@@ -5441,6 +5437,7 @@ def WS_WD_rf(spectra,
         dir_test = np.rad2deg(dir_test_radian) % 360
         dir_fix = np.abs((dir_pred - dir_test + 180) % 360 - 180)
 
+        # Apply minimum WS threshold for predicted direction
         if min_WS is not None:
                     masked_dir_pred_rad = np.arctan2(masked_sin, masked_cos)
                     masked_dir_pred = np.rad2deg(masked_dir_pred_rad)
@@ -5450,7 +5447,6 @@ def WS_WD_rf(spectra,
 
                     masked_dir_pred = np.rad2deg(np.arctan2(masked_sin, masked_cos)) % 360
                     
-    
         # Mean direction
         dir_mean = np.mean(dir_fix)
 
@@ -5521,6 +5517,7 @@ def WS_WD_rf(spectra,
         # WS
         print(f"Wind direction Mean Error: {dir_mean:.2f}°")
         print(f"Wind direction RMSE: {dir_rmse:.2f}°")
+
         # Plot all average R² and rmse results against centre frequency
         if plot_stat_results == True:
             
@@ -5533,6 +5530,7 @@ def WS_WD_rf(spectra,
             NS_dir_importance = dir_importance[n_bands:2*n_bands]
             EW_dir_importance = dir_importance[2*n_bands:3*n_bands]
 
+            # Plot
             fig, ax = plt.subplots(2, 3, figsize=(10, 10))
             ax[0, 0].plot(band_centres, Z_var_importance)
             ax[0, 0].set_title(f'Z {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
@@ -5558,21 +5556,22 @@ def WS_WD_rf(spectra,
             fig.supylabel('RF Permutation Importance')
             fig.tight_layout()
 
-
+        # Plot key results
         if plot_results == True:
 
-            plt.figure(figsize=(8, 8))
-
+            # Plot obs vs pred WS
             # AWS Variable
-
+            # Plot
+            plt.figure(figsize=(8, 8))
             plt.scatter(y_var_test, var_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            # For threshold
             if min_WS is not None:
                 plt.scatter(masked_y_var, masked_var, alpha = 0.7, s = 80, color = 'gray', label ='Observed Data < Wind Speed Threshold')
-                        
+            # y = x line
             plt.plot([y_var_test.min(), y_var_test.max()],
                     [y_var_test.min(), y_var_test.max()],
                     'r--', linewidth = 4, label = 'y = x')
-            
+            # Make it pretty
             plt.xlabel(f"Observed {variable_name}", fontsize = 20)
             plt.ylabel(f"Predicted {variable_name}", fontsize = 20)
             plt.title(f"{station} {variable_name}", fontsize = 20)
@@ -5581,26 +5580,28 @@ def WS_WD_rf(spectra,
             plt.legend(fontsize = 12, loc ='upper left')
             plt.tight_layout()
 
+            # Plot Wind Direction
             # Wind direction
             cardinals = {"N": 0,           
                         "E": (np.pi / 2),
                         "S": (np.pi),
                         "W": (3 * np.pi / 2)}
-        
+            # Plot
             plt.figure(figsize=(10, 6))
             plt.polar()      
             plt.scatter(dir_test_radian, np.ones(len(dir_test_radian)) * 0.8, alpha=0.7, label = 'Observed Wind Direction')
             plt.scatter(dir_pred_radian, np.ones(len(dir_test_radian)) * 0.85, alpha=0.7, label = 'Predicted Wind Direction')
-
+            # Apply Threshold
             if min_WS is not None:
                 plt.scatter(masked_dir_test_rad, np.ones(len(masked_dir_test_rad)) * 0.7, alpha = 0.7, marker ='x', color = 'gray', label ='Observed Data < Wind Speed Threshold')
                 plt.scatter(masked_dir_pred_rad, np.ones(len(masked_dir_test_rad)) * 0.75, alpha = 0.7, marker = '^', color = 'gray', label ='Predicted Data < Wind Speed Threshold')
-
+            # Make it Pretty
             plt.gca().set_theta_zero_location('N')
             plt.gca().set_theta_direction(-1)
             plt.title(f"{station} Wind Direction", pad = 50)
             plt.gca().set_rlabel_position(0)
             plt.ylim(0,1)
+            # Add cardinal direction labels
             for label, angle in cardinals.items():
                             plt.text(
                                 angle,
@@ -5611,14 +5612,15 @@ def WS_WD_rf(spectra,
                                 fontsize=12,
                                 fontweight="bold",
                                 clip_on=False)
-                            
+            # Legend
             plt.legend(loc = 'upper right', bbox_to_anchor = (1.55, 1.18))
-            
+            # Design
             plt.tight_layout()
 
+            # Plot WS, WD, Seis Power
             # AWS Variable and Wind direction
 
-            # Best frequency index
+            # Best frequency index for seismic power
             var_best = np.argmax(var_importance)
 
             if var_best < n_bands:
@@ -5642,29 +5644,30 @@ def WS_WD_rf(spectra,
             # Best Centre frequencies
             freq_best = band_centres[best_index]
 
+            # Create plot
             plt.figure(figsize=(10,6))
             ax = plt.subplot(projection='polar')
-
             plt.polar()
+            # Colour bar
             power_colours = best_var
-
             cmap = matplotlib.cm.get_cmap('plasma')
             new_cmap = matplotlib.colors.LinearSegmentedColormap.from_list('snipped_cmap', cmap(np.linspace(0, 0.90, 256)))
-
+            # Plot measurements
             obs = ax.scatter(dir_test_radian, y_var_test, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Observed {variable_name}', marker='x')
             pred = ax.scatter(dir_pred_radian, var_pred, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Predicted {variable_name}', marker='^')
-
+            # Plot thresholds
             if min_WS is not None:
                 plt.scatter(masked_dir_test_rad, masked_y_var, alpha = 0.7, s = 50, color = 'gray', label ='Observed Data < Wind Speed Threshold', marker ='x')
                 plt.scatter(masked_dir_pred_rad, masked_var, alpha = 0.7, s = 50, color = 'gray', label ='Predicted Data < Wind Speed Threshold', marker ='^')
-                        
+            # Make it pretty
             ax.set_theta_zero_location('N')
             ax.set_theta_direction(-1)
-            ax.set_ylabel(f'{variable_name}', labelpad=50, fontsize = 12)
+            ax.set_ylabel(f'{variable_name}', labelpad=55, fontsize = 12)
             ax.set_title(f"{station}: {variable_name} and Wind Direction", pad = 60, fontsize = 12)
             ax.set_rlabel_position(0)
             ax.tick_params(labelsize = 12)
             rmax = ax.get_rmax()
+            # Add cardinal direction labels
             for label, angle in cardinals.items():
                             ax.text(
                                 angle,
@@ -5675,14 +5678,14 @@ def WS_WD_rf(spectra,
                                 fontsize=15,
                                 fontweight="bold",
                                 clip_on=False)
+            # More pretty
             plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
-
             cbar = plt.colorbar(obs, ax=ax, pad=0.1)
             cbar.set_label(f'Log Seismic Power\n{best_component}, {freq_best[0]:.1f} Hz', size = 12)
             cbar.ax.tick_params(labelsize=12)
-
             plt.tight_layout()
 
+        # Plot WS Residiuals
         if plot_residuals == True:
 
             fig, ax = plt.subplots(1, 3, figsize=(15, 5))
@@ -5703,12 +5706,12 @@ def WS_WD_rf(spectra,
             ax[2].set_title(f"Residual Plot for {station}, Wind Direction Cos")
             fig.tight_layout()
 
-
+        # Plot Observed WS and seis power
         if plot_power_aws == True:
 
-            # LogSeismic Power vs Predicted AWS  
+            # LogSeismic Power vs Obs AWS  
 
-            # Best frequency index
+            # Best frequency index for power
             var_best = np.argmax(var_importance)
 
             if var_best < n_bands:
@@ -5770,17 +5773,18 @@ def WS_WD_rf(spectra,
             # Create plots
             plt.figure(figsize=(12,10))
             plt.scatter(best_var, y_var_test, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            # Plot threshold
             if min_WS is not None:
                 plt.scatter(masked_best_var, masked_y_var, alpha = 0.7, s = 70, color = 'gray', label ='Observed Data < Wind Speed Threshold', marker ='x')
-                    
+            # Plot
             plt.plot(x_sort, poly_pred, 'r--', linewidth = 4, label = f'{equation} \nR² = {poly_r2:.2f}')
             plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz", fontsize = 20)
+            # Make pretty
             plt.legend(fontsize = 20)
             plt.xlabel("Log Seismic Power", fontsize = 20)
             plt.ylabel(f"Observed {variable_name}", fontsize = 20)
             plt.xticks(fontsize = 20)
             plt.yticks(fontsize = 20)
-
             plt.tight_layout()
 
         # Find best 10 frequency bands for each component     
@@ -5802,7 +5806,7 @@ def WS_WD_rf(spectra,
 
             frequency = band_centres[freq_index]
 
+            # Print them
             print(f"{component}: {frequency[0]:.1f} Hz, importance = {var_importance[index]:.4f}")
-
 
     return results

@@ -5562,7 +5562,7 @@ def WS_WD_rf(spectra,
             # Plot obs vs pred WS
             # AWS Variable
             # Plot
-            plt.figure(figsize=(8, 8))
+            plt.figure(figsize=(10, 10))
             plt.scatter(y_var_test, var_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
             # For threshold
             if min_WS is not None:
@@ -5574,10 +5574,10 @@ def WS_WD_rf(spectra,
             # Make it pretty
             plt.xlabel(f"Observed {variable_name}", fontsize = 20)
             plt.ylabel(f"Predicted {variable_name}", fontsize = 20)
-            plt.title(f"{station} {variable_name}", fontsize = 20)
+            plt.title(f"{station} {variable_name}", fontsize = 25)
             plt.xticks(fontsize = 20)
             plt.yticks(fontsize = 20)
-            plt.legend(fontsize = 12, loc ='upper left')
+            plt.legend(fontsize = 20, loc ='upper left')
             plt.tight_layout()
 
             # Plot Wind Direction
@@ -5663,7 +5663,7 @@ def WS_WD_rf(spectra,
             ax.set_theta_zero_location('N')
             ax.set_theta_direction(-1)
             ax.set_ylabel(f'{variable_name}', labelpad=55, fontsize = 12)
-            ax.set_title(f"{station}: {variable_name} and Wind Direction", pad = 60, fontsize = 12)
+            ax.set_title(f"{station}: {variable_name} and Wind Direction", pad = 60, fontsize = 25)
             ax.set_rlabel_position(0)
             ax.tick_params(labelsize = 12)
             rmax = ax.get_rmax()
@@ -5688,7 +5688,7 @@ def WS_WD_rf(spectra,
         # Plot WS Residiuals
         if plot_residuals == True:
 
-            fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+            fig, ax = plt.subplots(1, 3, figsize=(8, 8))
             ax[0].scatter(var_pred, y_var_test - var_pred)
             ax[0].axhline(0, color='red', linestyle='--')
             ax[0].set_xlabel(f"Predicted {variable_name}")
@@ -5771,14 +5771,14 @@ def WS_WD_rf(spectra,
                 equation = 'Equation not calculated'
 
             # Create plots
-            plt.figure(figsize=(12,10))
+            plt.figure(figsize=(10,10))
             plt.scatter(best_var, y_var_test, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
             # Plot threshold
             if min_WS is not None:
                 plt.scatter(masked_best_var, masked_y_var, alpha = 0.7, s = 70, color = 'gray', label ='Observed Data < Wind Speed Threshold', marker ='x')
             # Plot
             plt.plot(x_sort, poly_pred, 'r--', linewidth = 4, label = f'{equation} \nR² = {poly_r2:.2f}')
-            plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz", fontsize = 20)
+            plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz", fontsize = 25)
             # Make pretty
             plt.legend(fontsize = 20)
             plt.xlabel("Log Seismic Power", fontsize = 20)

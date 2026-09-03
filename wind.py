@@ -5345,6 +5345,8 @@ def WS_WD_rf(spectra,
         freq = station_dict[station][0]['freq']
         aws_values = station_dict[station][0]['aws_values']
         wind_direction = station_dict[station][0]['wind_direction']
+
+        # Angle wrap around problem
         dir_radians = np.deg2rad(wind_direction)
         dir_sin = np.sin(dir_radians)
         dir_cos = np.cos(dir_radians)
@@ -5371,6 +5373,8 @@ def WS_WD_rf(spectra,
         # Stack all together to process all together as a larger dataset
         X_all = np.column_stack([X_Z, X_NS, X_EW])
         y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+
+        # Should the wind speed threshold be applied before or after training the model?
 
         # Train Model
         X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
@@ -5446,7 +5450,8 @@ def WS_WD_rf(spectra,
                     masked_dir_test_rad = np.arctan2(masked_y_sin, masked_y_cos)
 
                     masked_dir_pred = np.rad2deg(np.arctan2(masked_sin, masked_cos)) % 360
-                    
+                    masked_dir_test = np.rad2deg(np.arctan2(masked_y_sin, masked_y_cos)) % 360
+
         # Mean direction
         dir_mean = np.mean(dir_fix)
 
@@ -5514,7 +5519,7 @@ def WS_WD_rf(spectra,
         print(f"Cos cv R²: {cos_scores.mean():.4f} +/- {cos_scores.std():.4f}")
         results.append(station_results)
 
-        # WS
+        # WD
         print(f"Wind direction Mean Error: {dir_mean:.2f}°")
         print(f"Wind direction RMSE: {dir_rmse:.2f}°")
 
@@ -5579,6 +5584,53 @@ def WS_WD_rf(spectra,
             plt.yticks(fontsize = 20)
             plt.legend(fontsize = 20, loc ='upper left')
             plt.tight_layout()
+
+            # Plot obs vs pred Wind Direction
+            # sin2theta and cos2theta
+            fig, ax = plt.subplots(2,1, figsize=(10, 10))
+            ax[0].scatter(y_sin_test, sin_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            ax[1].scatter(y_cos_test, cos_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            # For threshold
+            if min_WS is not None:
+                ax[0].scatter(masked_y_sin, masked_sin, alpha = 0.7, s = 80, color = 'gray', label ='Observed Data < Wind Speed Threshold')
+                ax[1].scatter(masked_y_cos, masked_cos, alpha = 0.7, s = 80, color = 'gray', label ='Observed Data < Wind Speed Threshold')
+            # y = x line
+            ax[0].plot([y_sin_test.min(), y_sin_test.max()],
+                    [y_sin_test.min(), y_sin_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            ax[1].plot([y_cos_test.min(), y_cos_test.max()],
+                    [y_cos_test.min(), y_cos_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            ax[0].set_xlabel("Observed Wind Direction Sin2Theta", fontsize = 20)
+            ax[0].set_ylabel("Predicted Wind Direction Sin2Theta", fontsize = 20)
+            ax[0].set_title(f"{station} Wind Direction Sin2Theta", fontsize = 25)
+            ax[1].set_xlabel("Observed Wind Direction Cos2Theta", fontsize = 20)
+            ax[1].set_ylabel("Predicted Wind Direction Cos2Theta", fontsize = 20)
+            ax[1].set_title(f"{station} Wind Direction Cos2Theta", fontsize = 25)
+            ax[0].tick_params(axis='both', which='major', labelsize=20)
+            ax[1].tick_params(axis='both', which='major', labelsize=20)
+            fig.tight_layout()
+
+            # Sin2 and Cos2 Converted back to angle
+            plt.figure(figsize=(10, 10))
+            plt.scatter(dir_test, dir_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            # For threshold
+            if min_WS is not None:
+                plt.scatter(masked_dir_test, masked_dir_pred_rad, alpha = 0.7, s = 80, color = 'gray', label ='Observed Data < Wind Speed Threshold')
+            # y = x line
+            plt.plot([dir_test.min(), dir_test.max()],
+                    [dir_test.min(), dir_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            plt.xlabel("Observed Wind Direction (°)", fontsize = 20)
+            plt.ylabel("Predicted Wind Direction (°)", fontsize = 20)
+            plt.title(f"{station} Wind Direction (°)", fontsize = 25)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
+            plt.legend(fontsize = 20, loc ='upper left')
+            plt.tight_layout()
+
 
             # Plot Wind Direction
             # Wind direction

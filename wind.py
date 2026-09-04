@@ -5262,7 +5262,6 @@ def var_dir_rf(spectra,
     return results
 
 
-
 def full_spectrum_RF_WS_WD(spectra,
                             fmin = 1,
                             fmax = 49,
@@ -5668,11 +5667,22 @@ def full_spectrum_RF_WS_WD(spectra,
             power_colours = best_var
             cmap = matplotlib.cm.get_cmap('plasma')
             new_cmap = matplotlib.colors.LinearSegmentedColormap.from_list('snipped_cmap', cmap(np.linspace(0, 0.90, 256)))
+            #cmap2 = matplotlib.cm.get_cmap('cool') # For error magnitude
             # Plot measurements
             obs = ax.scatter(dir_test_radian, y_var_test, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Observed {variable_name}', marker='x')
             pred = ax.scatter(np.deg2rad(dir_pred), var_pred, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Predicted {variable_name}', marker='^')
+            # Plot error mag line between pred and obs point
 
-           # Make it pretty
+            # WS error
+            # Not useful yet, but could be used to colour the line between obs and pred points
+            #ws_error = np.abs(y_var_test - var_pred)
+            # Combined error magnitude. Cant just combine WS and WD so left out for now
+            #error_mag = np.sqrt(dir_fix**2 + ws_error**2)
+            #error_norm = matplotlib.colors.Normalize(vmin=error_mag.min(), vmax=error_mag.max())
+
+            for i in range(len(dir_test_radian)):
+                ax.plot([dir_test_radian[i], np.deg2rad(dir_pred[i])], [y_var_test[i], var_pred[i]], color='grey', alpha=1, linewidth=0.8)
+            # Make it pretty
             ax.set_theta_zero_location('N')
             ax.set_theta_direction(-1)
             ax.set_ylabel(f'{variable_name}', labelpad=55, fontsize = 12)
@@ -5693,9 +5703,19 @@ def full_spectrum_RF_WS_WD(spectra,
                                 clip_on=False)
             # More pretty
             plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
+            # Seismic Colour Bar
             cbar = plt.colorbar(obs, ax=ax, pad=0.1)
             cbar.set_label(f'Log Seismic Power\n{best_component}, {freq_best[0]:.1f} Hz', size = 12)
+            # Error Colour Bar
+            # Need to think of a good way to represent error well. Cant just combine WS and WD
+            #sm = matplotlib.cm.ScalarMappable(norm=error_norm, cmap=cmap2)
+            #sm.set_array([])   # required placeholder
+            #cbar2 = plt.colorbar(sm, ax=ax, pad=0.1)
+            #cbar2.set_label("Error Magnitude", fontsize=12)
+
+                                        
             cbar.ax.tick_params(labelsize=12)
+            #cbar2.ax.tick_params(labelsize=12)
             plt.tight_layout()
 
         # Plot WS Residiuals

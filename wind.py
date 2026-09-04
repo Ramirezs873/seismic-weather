@@ -5262,6 +5262,7 @@ def var_dir_rf(spectra,
     return results
 
 
+
 def full_spectrum_RF_WS_WD(spectra,
                             fmin = 1,
                             fmax = 49,
@@ -5428,9 +5429,6 @@ def full_spectrum_RF_WS_WD(spectra,
         dir_test_radian = np.arctan2(y_sin_test, y_cos_test)
         dir_test = np.rad2deg(dir_test_radian) % 360
         dir_fix = np.abs((dir_pred - dir_test + 180) % 360 - 180)
-
-        # Apply minimum WS threshold for predicted direction
-        
 
         # Mean direction
         dir_mean = np.mean(dir_fix)
@@ -5601,7 +5599,6 @@ def full_spectrum_RF_WS_WD(spectra,
             plt.legend(fontsize = 20, loc ='upper left')
             plt.tight_layout()
 
-
             # Plot Wind Direction
             # Wind direction
             cardinals = {"N": 0,           
@@ -5612,7 +5609,7 @@ def full_spectrum_RF_WS_WD(spectra,
             plt.figure(figsize=(10, 6))
             plt.polar()      
             plt.scatter(dir_test_radian, np.ones(len(dir_test_radian)) * 0.8, alpha=0.7, label = 'Observed Wind Direction')
-            plt.scatter(dir_pred_radian, np.ones(len(dir_test_radian)) * 0.85, alpha=0.7, label = 'Predicted Wind Direction')
+            plt.scatter(np.deg2rad(dir_pred), np.ones(len(dir_test_radian)) * 0.85, alpha=0.7, label = 'Predicted Wind Direction')
 
             # Make it Pretty
             plt.gca().set_theta_zero_location('N')
@@ -5673,7 +5670,7 @@ def full_spectrum_RF_WS_WD(spectra,
             new_cmap = matplotlib.colors.LinearSegmentedColormap.from_list('snipped_cmap', cmap(np.linspace(0, 0.90, 256)))
             # Plot measurements
             obs = ax.scatter(dir_test_radian, y_var_test, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Observed {variable_name}', marker='x')
-            pred = ax.scatter(dir_pred_radian, var_pred, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Predicted {variable_name}', marker='^')
+            pred = ax.scatter(np.deg2rad(dir_pred), var_pred, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Predicted {variable_name}', marker='^')
 
            # Make it pretty
             ax.set_theta_zero_location('N')

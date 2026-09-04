@@ -5262,19 +5262,19 @@ def var_dir_rf(spectra,
     return results
 
 
-def WS_WD_rf(spectra,
-                fmin = 1,
-                fmax = 49,
-                f_band_width = 1,
-                step_size = 1,
-                n_repeats = 3,
-                min_WS = None,
-                poly_degree = 2,
-                plot_stat_results = True,
-                plot_results = True,
-                plot_residuals = True,
-                plot_power_aws = True,
-                variable_name = 'AWS Wind Speed (km/hr)'):
+def full_spectrum_RF_WS_WD(spectra,
+                            fmin = 1,
+                            fmax = 49,
+                            f_band_width = 1,
+                            step_size = 1,
+                            n_repeats = 3,
+                            min_WS = None,
+                            poly_degree = 2,
+                            plot_stat_results = True,
+                            plot_results = True,
+                            plot_residuals = True,
+                            plot_power_aws = True,
+                            variable_name = 'AWS Wind Speed (km/hr)'):
     
     """
     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -5373,9 +5373,14 @@ def WS_WD_rf(spectra,
         # Stack all together to process all together as a larger dataset
         X_all = np.column_stack([X_Z, X_NS, X_EW])
         y_all = np.column_stack([aws_values, dir_sin, dir_cos])
-
+       
         # Should the wind speed threshold be applied before or after training the model?
-
+        # Apply minimum WS threshold
+        if min_WS is not None:
+            mask = y_all[:, 0] > min_WS
+            X_all = X_all[mask]
+            y_all = y_all[mask]
+            
         # Train Model
         X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
 
@@ -5400,41 +5405,24 @@ def WS_WD_rf(spectra,
         sin_pred = sin_model.predict(X_all_test)
         cos_pred = cos_model.predict(X_all_test)
 
+        # Round WS Prediction to one decimal so it matches with AWS Measurement
+        var_pred = np.round(var_pred, decimals=1)
+
         # Observed
         y_var_test = y_all_test[:, 0]
         y_sin_test = y_all_test[:, 1]
         y_cos_test = y_all_test[:, 2]
 
-        # Apply minimum WS threshold
-        if min_WS is not None:
-
-            mask = y_var_test >= min_WS
-
-            masked_var = var_pred[~mask]
-            var_pred = var_pred[mask]
-
-            masked_sin = sin_pred[~mask]
-            sin_pred = sin_pred[mask]
-
-            masked_cos = cos_pred[~mask]
-            cos_pred = cos_pred[mask]
-
-            masked_y_var = y_var_test[~mask]
-            y_var_test = y_var_test[mask]
-
-            masked_y_sin = y_sin_test[~mask]
-            y_sin_test = y_sin_test[mask]
-
-            masked_y_cos = y_cos_test[~mask]
-            y_cos_test = y_cos_test[mask]
-
-            masked_X_all = X_all_test[~mask]
-            X_all_test = X_all_test[mask]
-
+    
         # Predicted direction
         dir_pred_radian = np.arctan2(sin_pred, cos_pred)
         dir_pred = np.rad2deg(dir_pred_radian)
-        dir_pred = dir_pred % 360
+
+        # Round to nearest 10 degrees
+        dir_pred = np.round(dir_pred, decimals=-1)
+        
+        # Wrap back to 0-360 degrees
+        dir_pred = dir_pred % 360 
 
         # Fix angles near end points
         dir_test_radian = np.arctan2(y_sin_test, y_cos_test)
@@ -5442,15 +5430,7 @@ def WS_WD_rf(spectra,
         dir_fix = np.abs((dir_pred - dir_test + 180) % 360 - 180)
 
         # Apply minimum WS threshold for predicted direction
-        if min_WS is not None:
-                    masked_dir_pred_rad = np.arctan2(masked_sin, masked_cos)
-                    masked_dir_pred = np.rad2deg(masked_dir_pred_rad)
-                    masked_dir_pred = masked_dir_pred % 360
-
-                    masked_dir_test_rad = np.arctan2(masked_y_sin, masked_y_cos)
-
-                    masked_dir_pred = np.rad2deg(np.arctan2(masked_sin, masked_cos)) % 360
-                    masked_dir_test = np.rad2deg(np.arctan2(masked_y_sin, masked_y_cos)) % 360
+        
 
         # Mean direction
         dir_mean = np.mean(dir_fix)
@@ -5470,7 +5450,7 @@ def WS_WD_rf(spectra,
         var_importance = permutation_importance(var_model, X_all_test, y_var_test, n_repeats=n_repeats, scoring='r2').importances_mean
         sin_importance = permutation_importance(sin_model, X_all_test, y_sin_test, n_repeats=n_repeats, scoring='r2').importances_mean
         cos_importance = permutation_importance(cos_model, X_all_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
-        dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
+        #dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
 
         # Back to degrees
         dir_pred = np.rad2deg(np.arctan2(sin_pred, cos_pred)) % 360
@@ -5531,30 +5511,30 @@ def WS_WD_rf(spectra,
             NS_var_importance = var_importance[n_bands:2*n_bands]
             EW_var_importance = var_importance[2*n_bands:3*n_bands]
             # AWS Direction
-            Z_dir_importance = dir_importance[:n_bands]
-            NS_dir_importance = dir_importance[n_bands:2*n_bands]
-            EW_dir_importance = dir_importance[2*n_bands:3*n_bands]
+            #Z_dir_importance = dir_importance[:n_bands]
+            #NS_dir_importance = dir_importance[n_bands:2*n_bands]
+            #EW_dir_importance = dir_importance[2*n_bands:3*n_bands]
 
             # Plot
-            fig, ax = plt.subplots(2, 3, figsize=(10, 10))
-            ax[0, 0].plot(band_centres, Z_var_importance)
-            ax[0, 0].set_title(f'Z {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
-            ax[0, 0].set_ylim(top=1)
-            ax[0, 1].plot(band_centres, NS_var_importance)
-            ax[0, 1].set_title(f'NS {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
-            ax[0, 1].set_ylim(top=1)
-            ax[0, 2].plot(band_centres, EW_var_importance)
-            ax[0, 2].set_title(f'EW {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
-            ax[0, 2].set_ylim(top=1)
-            ax[1, 0].plot(band_centres, Z_dir_importance)
-            ax[1, 0].set_title(f'Combined Z Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
-            ax[1, 0].set_ylim(top=1)
-            ax[1, 1].plot(band_centres, NS_dir_importance)
-            ax[1, 1].set_title(f'Combined NS Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
-            ax[1, 1].set_ylim(top=1)
-            ax[1, 2].plot(band_centres, EW_dir_importance)
-            ax[1, 2].set_title(f'Combined EW Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
-            ax[1, 2].set_ylim(top=1)
+            fig, ax = plt.subplots(1, 3, figsize=(10, 10))
+            ax[0].plot(band_centres, Z_var_importance)
+            ax[0].set_title(f'Z {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[0].set_ylim(top=1)
+            ax[1].plot(band_centres, NS_var_importance)
+            ax[1].set_title(f'NS {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[1].set_ylim(top=1)
+            ax[2].plot(band_centres, EW_var_importance)
+            ax[2].set_title(f'EW {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[2].set_ylim(top=1)
+            #ax[1, 0].plot(band_centres, Z_dir_importance)
+            #ax[1, 0].set_title(f'Combined Z Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 0].set_ylim(top=1)
+            #ax[1, 1].plot(band_centres, NS_dir_importance)
+            #ax[1, 1].set_title(f'Combined NS Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 1].set_ylim(top=1)
+            #ax[1, 2].plot(band_centres, EW_dir_importance)
+            #ax[1, 2].set_title(f'Combined EW Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 2].set_ylim(top=1)
 
             fig.suptitle(f'{station}:')
             fig.supxlabel('Frequency (Hz)')
@@ -5569,9 +5549,7 @@ def WS_WD_rf(spectra,
             # Plot
             plt.figure(figsize=(10, 10))
             plt.scatter(y_var_test, var_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
-            # For threshold
-            if min_WS is not None:
-                plt.scatter(masked_y_var, masked_var, alpha = 0.7, s = 80, color = 'gray', label ='Observed Data < Wind Speed Threshold')
+
             # y = x line
             plt.plot([y_var_test.min(), y_var_test.max()],
                     [y_var_test.min(), y_var_test.max()],
@@ -5590,10 +5568,7 @@ def WS_WD_rf(spectra,
             fig, ax = plt.subplots(2,1, figsize=(10, 10))
             ax[0].scatter(y_sin_test, sin_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
             ax[1].scatter(y_cos_test, cos_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
-            # For threshold
-            if min_WS is not None:
-                ax[0].scatter(masked_y_sin, masked_sin, alpha = 0.7, s = 80, color = 'gray', label ='Observed Data < Wind Speed Threshold')
-                ax[1].scatter(masked_y_cos, masked_cos, alpha = 0.7, s = 80, color = 'gray', label ='Observed Data < Wind Speed Threshold')
+            
             # y = x line
             ax[0].plot([y_sin_test.min(), y_sin_test.max()],
                     [y_sin_test.min(), y_sin_test.max()],
@@ -5615,9 +5590,7 @@ def WS_WD_rf(spectra,
             # Sin2 and Cos2 Converted back to angle
             plt.figure(figsize=(10, 10))
             plt.scatter(dir_test, dir_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
-            # For threshold
-            if min_WS is not None:
-                plt.scatter(masked_dir_test, masked_dir_pred_rad, alpha = 0.7, s = 80, color = 'gray', label ='Observed Data < Wind Speed Threshold')
+            
             # y = x line
             plt.plot([dir_test.min(), dir_test.max()],
                     [dir_test.min(), dir_test.max()],
@@ -5643,10 +5616,7 @@ def WS_WD_rf(spectra,
             plt.polar()      
             plt.scatter(dir_test_radian, np.ones(len(dir_test_radian)) * 0.8, alpha=0.7, label = 'Observed Wind Direction')
             plt.scatter(dir_pred_radian, np.ones(len(dir_test_radian)) * 0.85, alpha=0.7, label = 'Predicted Wind Direction')
-            # Apply Threshold
-            if min_WS is not None:
-                plt.scatter(masked_dir_test_rad, np.ones(len(masked_dir_test_rad)) * 0.7, alpha = 0.7, marker ='x', color = 'gray', label ='Observed Data < Wind Speed Threshold')
-                plt.scatter(masked_dir_pred_rad, np.ones(len(masked_dir_test_rad)) * 0.75, alpha = 0.7, marker = '^', color = 'gray', label ='Predicted Data < Wind Speed Threshold')
+
             # Make it Pretty
             plt.gca().set_theta_zero_location('N')
             plt.gca().set_theta_direction(-1)
@@ -5707,11 +5677,8 @@ def WS_WD_rf(spectra,
             # Plot measurements
             obs = ax.scatter(dir_test_radian, y_var_test, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Observed {variable_name}', marker='x')
             pred = ax.scatter(dir_pred_radian, var_pred, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Predicted {variable_name}', marker='^')
-            # Plot thresholds
-            if min_WS is not None:
-                plt.scatter(masked_dir_test_rad, masked_y_var, alpha = 0.7, s = 50, color = 'gray', label ='Observed Data < Wind Speed Threshold', marker ='x')
-                plt.scatter(masked_dir_pred_rad, masked_var, alpha = 0.7, s = 50, color = 'gray', label ='Predicted Data < Wind Speed Threshold', marker ='^')
-            # Make it pretty
+
+           # Make it pretty
             ax.set_theta_zero_location('N')
             ax.set_theta_direction(-1)
             ax.set_ylabel(f'{variable_name}', labelpad=55, fontsize = 12)
@@ -5772,27 +5739,21 @@ def WS_WD_rf(spectra,
                 best_index = var_best
                 best_var = X_all_test[:, var_best]
 
-                if min_WS is not None:
-                    masked_best_var = masked_X_all[:, var_best]
-
+                
             elif var_best < 2*n_bands:
 
                 best_component = "NS"
                 best_index = var_best - n_bands
                 best_var = X_all_test[:, var_best]
 
-                if min_WS is not None:
-                    masked_best_var = masked_X_all[:, var_best]
-
+            
             else:
 
                 best_component = "EW"
                 best_index = var_best - 2*n_bands
                 best_var = X_all_test[:, var_best]
 
-                if min_WS is not None:
-                    masked_best_var = masked_X_all[:, var_best]
-
+                
             # Best Centre frequencies
             freq = band_centres[best_index]
 
@@ -5825,9 +5786,7 @@ def WS_WD_rf(spectra,
             # Create plots
             plt.figure(figsize=(10,10))
             plt.scatter(best_var, y_var_test, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
-            # Plot threshold
-            if min_WS is not None:
-                plt.scatter(masked_best_var, masked_y_var, alpha = 0.7, s = 70, color = 'gray', label ='Observed Data < Wind Speed Threshold', marker ='x')
+
             # Plot
             plt.plot(x_sort, poly_pred, 'r--', linewidth = 4, label = f'{equation} \nR² = {poly_r2:.2f}')
             plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz", fontsize = 25)

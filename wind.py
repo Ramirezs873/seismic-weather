@@ -5452,9 +5452,6 @@ def full_spectrum_RF_WS_WD(spectra,
         cos_importance = permutation_importance(cos_model, X_all_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
         #dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
 
-        # Back to degrees
-        dir_pred = np.rad2deg(np.arctan2(sin_pred, cos_pred)) % 360
-
         # Store results
         station_results.append({
             'fmin': fmin,
@@ -5516,7 +5513,7 @@ def full_spectrum_RF_WS_WD(spectra,
             #EW_dir_importance = dir_importance[2*n_bands:3*n_bands]
 
             # Plot
-            fig, ax = plt.subplots(1, 3, figsize=(10, 10))
+            fig, ax = plt.subplots(1, 3, figsize=(8, 6))
             ax[0].plot(band_centres, Z_var_importance)
             ax[0].set_title(f'Z {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
             ax[0].set_ylim(top=1)

@@ -27,6 +27,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.inspection import permutation_importance
 import matplotlib
 
+###################################################################
+####################### Reading Data ##############################
+###################################################################
+
 def read_data(path, 
               station_code, 
               id_code):
@@ -121,7 +125,8 @@ def resample_aws(data, year, month, day, hour, freq="30min"):
     if df_slice.empty: 
         print("No data available for the selected time period.") 
         return
-    
+
+    # Resample to a regular datetime grid
     df_slice = df_slice.set_index("datetime")
     df = df_slice.resample(freq).asfreq() 
     df.index.name = "datetime"
@@ -407,6 +412,577 @@ def plot_rose_wind(data,
                 angle=90,
                 side="counterclockwise")))
     fig.show()
+
+def AWS_variable(data, 
+                variable='Wind speed in km/h',
+                year=None, 
+                month=None, 
+                day=None,
+                hour=None,
+                plot = True,
+                apply_smooth = False,
+                smoothie = 3):
+
+    """
+    Plots the chosen variable for a given year and month from the provided DataFrame.
+    Always stores wind direction alongside the chosen variable as array element [2].
+
+    Parameters:
+    data (pd.DataFrame): 
+        The DataFrame containing the weather station data.
+    variable (str): 
+        The variable to plot. Must be a column heading in the DataFrame.
+    year (int): 
+        The year for plotting (2010-2025 or None for all years).
+    month (int or tuple): 
+        The month(s) for plotting.
+        None for the entire year,
+        A single month (1-12),
+        or a tuple of (start_month, end_month) for a range of months.
+    day (int or tuple): 
+        The day(s) for plotting.
+        None for the entire month,
+        A single day (1-31),
+        or a tuple of (start_day, end_day) for a range of days.
+    hour (int or tuple):
+        The hour(s) for plotting.
+        None for entire day,
+        A single hour (0-23),
+        or a tuple of (start_hour, end_hour) for a range of hours.
+    apply_smooth (bool): 
+        True/False. Applying ObsPy smooth() function.
+    smoothie (int):
+        Number of values to calculate moving average for smoothing.
+    """
+    
+    # Check if time inputs are single valued or a range.
+    # Year
+    if isinstance(year, (tuple, list)) and len(year) == 2: 
+        start_year, end_year = year 
+        df_slice = data[(data['datetime'].dt.year >= start_year) & 
+                        (data['datetime'].dt.year <= end_year) ].copy()
+    elif year is None or year < 2010 or year > 2025:
+        df_slice = data.copy()
+    else:
+        df_slice = data[data['datetime'].dt.year == year].copy()
+    # Month
+    if isinstance(month, (tuple, list)) and len(month) == 2: 
+        start_month, end_month = month 
+        df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                        (df_slice['datetime'].dt.month <= end_month) ].copy()
+    elif isinstance(month, int): 
+        df_slice = df_slice[df_slice['datetime'].dt.month == month].copy()
+    # Day
+    if isinstance(day, (tuple, list)) and len(day) == 2:
+        start_day, end_day = day
+        df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
+                            (df_slice['datetime'].dt.day <= end_day)].copy()
+    elif isinstance(day, int):
+        df_slice = df_slice[df_slice['datetime'].dt.day == day].copy()
+    # Hour
+    if isinstance(hour, (tuple, list)) and len(hour) == 2:
+        start_hour, end_hour = hour
+        df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                            (df_slice['datetime'].dt.hour <= end_hour)].copy()
+    elif isinstance(hour, int):
+        df_slice = df_slice[df_slice['datetime'].dt.hour == hour].copy()
+    
+    # Check if there is data
+    if df_slice.empty: 
+        print("No data available for the selected time period.") 
+        return
+
+    # Check if variable exists in the DataFrame
+    if variable not in df_slice.columns:
+        print(f"Variable '{variable}' not found in the DataFrame.")
+        return
+    
+    # Convert to numeric
+    df_slice[variable] = pd.to_numeric(df_slice[variable], errors='coerce')
+    var = df_slice[variable]
+
+    df_slice['Wind direction in degrees true'] = pd.to_numeric(df_slice['Wind direction in degrees true'], errors='coerce')
+    df_slice['Wind direction in degrees true'] %= 360
+    WD = df_slice['Wind direction in degrees true']
+
+    # Normalisation
+    # df_slice['Wind_norm'] = wind_speed / wind_speed.max()
+
+    # Smoothing
+    if apply_smooth == True:
+        var = smooth(var.to_numpy(), smoothie)
+        WD = smooth(WD.to_numpy(), smoothie)
+    else:
+        var = var.to_numpy()
+        WD = WD.to_numpy()
+
+    # Clean Data
+    valid_mask = ~np.isnan(var)
+
+    var = var[valid_mask]
+    WD = WD[valid_mask]
+    time = df_slice['datetime'].to_numpy()[valid_mask]
+
+    if plot == True:
+        
+        # Create Figure 
+        plt.figure(figsize=(15,6))
+
+        # Plot
+        plt.plot(time, var, 
+                color='black', linewidth=0.5)
+        
+        # Title construction
+        title = f"{variable} at Station {df_slice['Station Number'].iloc[0]} for "
+        # Year
+        if isinstance(year, (tuple, list)):
+            title += f"{year[0]} to {year[1]}"
+        elif year is None:
+            title += "All Years"
+        else:
+            title += f"{year}"
+        # Month
+        if isinstance(month, (tuple, list)):
+            title += f", Months:{month[0]} to {month[1]}"
+        elif isinstance(month, int):
+            title += f", Month:{month}"
+        # Day
+        if isinstance(day, (tuple, list)):
+            title += f", Days:{day[0]} to {day[1]}"
+        elif isinstance(day, int):
+            title += f", Day:{day}"
+        # Hour
+        if isinstance(hour, (tuple, list)):
+            title += f", Hours:{hour[0]} to {hour[1]}"
+        elif isinstance(hour, int):
+            title += f", Hour:{hour}"
+        plt.title(title)
+
+        # Plot Formating
+        plt.ylabel(f'{variable}')
+        plt.xlabel('Time')
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+
+    return time, var, WD
+
+def find_channel(stream, options):
+    """
+    Find appropriate NS and EW Channels from a chosen stream.
+    Copied from align.py.
+    
+    Parameters:
+    stream (obspy.core.stream.Stream):
+        An ObsPy stream object.
+    options (list of str):
+        A list of channel codes.
+    """
+    # Loop through streams and find the associated channel code
+    traces = []
+    for ch in options:
+        traces.extend(stream.select(channel=ch))
+        if len(traces) > 0:
+            return traces # Return first channel code
+        
+    # If none are found
+    return None 
+
+def load_seis_data(config = None, 
+                   filename = None, 
+                   path = None):
+
+    """
+    Loads seismic data from a specified path or filename into a dictionary.
+
+    Parameters:
+    config (dict):
+        Information from a config file containing the local "seismic_data_path".
+    filename (str):
+        Name of the file to load.
+    path (str):
+        Path to the file to load.
+    
+    Returns:
+    new_dict (dict):
+        Dictionary containing seismic waveform data, 
+        with station names as keys and lists of traces as values.
+    """
+    if config:
+        # Path 
+        base_path = Path(config["seismic_data_path"]) if config else Path(".")
+        base_path.mkdir(parents=True, exist_ok=True)
+        if filename:
+            file_path = (base_path / filename).with_suffix(".mseed")
+        else:
+            print("Please provide a filename that exists in the seismic data path.")
+            return None
+    elif path:
+            file_path = Path(path)
+    else:
+        print("Please provide either a filename in the config seismic data path or a path to the seismic data.")
+        return None
+
+    print(f"Reading existing file: {file_path}")
+    stream = read(str(file_path))
+    new_dict = defaultdict(list)
+    for tr in stream:
+        new_dict[tr.stats.station].append(tr)
+    return new_dict
+
+###################################################################
+####################### Some Processing ###########################
+######### More Processing in align.py and process.py ##############
+###################################################################
+
+def apply_filter(wave_dict = None, 
+                 filter_type = None, 
+                 freqmin=None, 
+                 freqmax=None, 
+                 freq=None, 
+                 corners=4, 
+                 zerophase=True,
+                 save_mseed=False,
+                 config=None,
+                 read_file=True,
+                 filename='default_filter'):
+
+    """
+    Apply a filter to seismic waveform data stored in a dictionary without altering the original.
+
+    Parameters:
+    wave_dict (dict):
+        Dictionary containing seismic waveform data.
+    filter_type (str):
+        Type of filter to apply. 
+        Options include 'bandpass', 'bandstop', 'lowpass', 'highpass'.
+        'lowpass_cheby_2', 'lowpass_fir', 'remez_fir' currently unsupported.
+    freqmin (float):
+        Minimum frequency for bandpass/bandstop filters.
+    freqmax (float):
+        Maximum frequency for bandpass/bandstop filters.
+    freq (float):
+        Cutoff frequency for lowpass/highpass filters.
+    corners (int):
+        Number of corners for the filter.
+    zerophase (bool):
+        True/False. If True, apply a zero-phase filter.
+    save_mseed (bool):
+        True/False. True to save as mseed file.
+    config (dict):
+        Information from a config file containing the local "seismic_data_path".
+    read_file (bool):
+        True/False. True to switch on file checking.
+    filename (str):
+        Title of saved mseed file.
+
+    Returns:
+    filtered_dict (dict):
+        Dictionary containing filtered seismic waveform data.
+    """
+
+    # Path 
+    base_path = Path(config["seismic_data_path"]) if config else Path(".")
+    base_path.mkdir(parents=True, exist_ok=True)
+    file_path = (base_path / filename).with_suffix(".mseed")
+
+    # Read file if it exists
+    if file_path.exists():
+        if read_file == True:
+            print(f"Reading existing file: {file_path}")
+            stream = read(str(file_path))
+            filtered_dict = defaultdict(list)
+            for tr in stream:
+                filtered_dict[tr.stats.station].append(tr)
+
+    else:
+            
+        # Setup dictionary
+        filtered_dict = defaultdict(list)
+        streams = []
+        # Loop through and apply filter to the traces
+        for station_name, traces in wave_dict.items():
+            st = Stream([tr.copy() for tr in traces]) # Copy to avoid overwriting data
+
+            if filter_type in ('bandpass', 'bandstop'):
+                st.filter(type=filter_type, 
+                        freqmin=freqmin, 
+                        freqmax=freqmax, 
+                        corners=corners, 
+                        zerophase=zerophase)
+                streams.append(st)
+
+            elif filter_type in ('lowpass', 'highpass'): 
+                st.filter(type=filter_type, 
+                        freq=freq, 
+                        corners=corners, 
+                        zerophase=zerophase)
+                streams.append(st)
+
+            else:
+                raise ValueError(f"Unsupported filter type: {filter_type}") #'lowpass_cheby_2', 'lowpass_fir', 'remez_fir' currently not setup
+
+            filtered_dict[station_name] = st.traces # Write to a dictionary
+        
+        # Save as mseed file
+        if save_mseed == True:
+            merged_stream = streams[0].copy() # Copy to avoid overwriting data
+            for st in streams[1:]:
+                merged_stream += st
+            merged_stream.merge()
+
+            merged_stream.write(f'{str(file_path)}', format="MSEED")
+            print(f'Saved as {file_path}')
+
+    return filtered_dict
+
+def select_time(wave_dict=None, 
+                t_start=None, 
+                duration=None,
+                save_mseed=False,
+                config=None,
+                read_file=True,
+                filename='default_trim'):
+    
+    """
+    Select a specific time window from seismic waveform data stored in a dictionary without altering the original.
+
+    Parameters:
+    wave_dict (dict):
+        Dictionary containing seismic waveform data.
+    t_start (UTCDateTime):
+        Start time for the time window.
+    duration (float):
+        Duration of the time window in seconds.
+    save_mseed (bool):
+        True/False. True to save as mseed file.
+    config (dict):
+        Information from a config file containing the local "seismic_data_path".
+    read_file (bool):
+        True/False. True to switch on file checking.
+    filename (str):
+        Title of saved mseed file.
+    Returns:
+    new_dict (dict):
+        Dictionary containing selected seismic waveform data.
+    """
+
+    # Path 
+    base_path = Path(config["seismic_data_path"]) if config else Path(".")
+    base_path.mkdir(parents=True, exist_ok=True)
+    file_path = (base_path / filename).with_suffix(".mseed")
+
+    # Read file if it exists
+    if file_path.exists():
+        if read_file == True:
+            print(f"Reading existing file: {file_path}")
+            stream = read(str(file_path))
+            new_dict = defaultdict(list)
+            for tr in stream:
+                new_dict[tr.stats.station].append(tr)
+            
+            return new_dict
+        
+    else:
+        # Establish timespan
+        t_end = t_start + duration
+        streams = []
+        # Trim to desired timespan and write to a direction
+        new_dict = defaultdict(list)
+        for station_name in wave_dict:
+            st = Stream(wave_dict[station_name]).copy() # Copy to avoid overwriting data
+            st.trim(starttime=t_start, endtime=t_end, pad=False)
+            streams.append(st)
+            new_dict[station_name].extend(st.traces)
+
+        # Save as mseed file
+        if save_mseed == True:
+            merged_stream = streams[0].copy() # Copy to avoid overwriting data
+            for st in streams[1:]:
+                merged_stream += st
+            merged_stream.merge()
+
+            merged_stream.write(f'{str(file_path)}', format="MSEED")
+            print(f'Saved as {file_path}')
+
+    return new_dict
+
+def spectra_fft(aws_variable,
+                wave_dict = None,
+                config=None,
+                use_file = False,
+                seismic_mseed_name=None, 
+                pad_value=np.nan):
+
+    """
+    Trim 30 minute segments of seismic data which match AWS dataset.
+    Apply a real fast fourier transform to compute the frequency spectrum 
+    for each seismic component and calculate the powerfor each time step. 
+
+    Parameters:
+        aws_variable (array):
+            An array of AWS data in format 
+            aws_variable[0] (time), aws_variable[1] (variable array), aws_variable[2] (wind direction array).
+        wave_dict (dict):
+             A wave dictionary containing seismic waveform data.
+        config (dict):
+            Information from a config file containing the local "seismic_data_path".
+        use_file (bool):
+            True/False. True to switch on file checking for mseed file.
+        seismic_mseed_file (str):
+            Title of saved mseed file.
+            Seismic data must begin atleast 30 minutes before the first AWS timestamp
+            and end anytime after the final AWS timestamp.
+        pad_value (float):
+            Value to use for padding.
+
+    Returns:
+       all_spectra (list):
+            A list of dictionaries containing the frequency and power 
+            for each component (EW, NS, Z) for each station and time period.
+    """
+
+    # File and Storage
+    if use_file == True:
+        # Path 
+        base_path = Path(config["seismic_data_path"]) if config else Path(".")
+        base_path.mkdir(parents=True, exist_ok=True)
+        file_path = (base_path / seismic_mseed_name).with_suffix(".mseed")
+
+        # Read file if it exists
+        if file_path.exists():
+            print(f"Reading existing file: {file_path}")
+            stream = read(str(file_path))
+            wave_dict = defaultdict(list)
+            for tr in stream:
+                wave_dict[tr.stats.station].append(tr)
+        else:
+            print("No File Found")
+
+    else:
+        if wave_dict == None:
+            print('wave_dict not selected. Please input a file or a dictionary. (default: use_file = False )')
+            return None
+    
+    # Setup 
+    station_list = list(wave_dict.keys())
+    aws_times = aws_variable[0]   # timestamps
+    # EW, NS, Z components following real fast fourier transform (RFFT)
+    all_spectra = []
+
+    # Loop through all stations
+    for station in station_list:
+        
+        spectra = []
+
+        # Organise Streams
+        st = Stream(wave_dict[station])
+
+        # Puts in alphabetical order. 
+        # E, N, Z
+        st.sort(['channel'])   
+
+        EW = st.select(channel="*E")[0].data
+        NS = st.select(channel="*N")[0].data
+        Z  = st.select(channel="*Z")[0].data
+        
+        # EW, NS, Z all same length and freq
+        fs = st[0].stats.sampling_rate
+        start_time = st[0].stats.starttime
+
+        # Define Window Length Dependent on AWS
+        # 30 Min (times 60 sec) AWS Measurement window
+        # times seismic sampling rate
+        window_length = int(30 * 60 * fs)
+
+        # Setup time index list
+        start_i = []
+
+        # Loop through all time periods
+        for time in aws_times:
+            
+            # 30 min collection time before AWS measurement
+            t0 = UTC(str(time)) - timedelta(minutes=30)
+            # Define index
+            idx = int((t0 - start_time) * fs)
+            start_i.append(idx)
+        
+        # Convert to np array
+        start_i = np.array(start_i)
+        # Define n
+        n_starts = start_i.shape[0]
+
+        # Setup Output Arrays
+        EW_out = np.full((n_starts, window_length), pad_value, dtype=EW.dtype) 
+        NS_out = np.full((n_starts, window_length), pad_value, dtype=NS.dtype) 
+        Z_out = np.full((n_starts, window_length), pad_value, dtype=Z.dtype) 
+
+        # Define the offsets
+        offsets = np.arange(window_length)
+
+        # Define the seismic index based on the offsets
+        index = start_i[:, None] + offsets[None, :]
+
+        # Check if data exists within the index bounds
+        EW_in_bounds = (index >= 0) & (index < EW.shape[0])
+        NS_in_bounds = (index >= 0) & (index < NS.shape[0])
+        Z_in_bounds = (index >= 0) & (index < Z.shape[0])
+
+        # Define the valid indicies
+        EW_flat_idx = index[EW_in_bounds]
+        NS_flat_idx = index[NS_in_bounds]
+        Z_flat_idx = index[Z_in_bounds]
+
+        # Place the balid indicies into the output arrays
+        EW_out[EW_in_bounds] = EW[EW_flat_idx]
+        NS_out[NS_in_bounds] = NS[NS_flat_idx]
+        Z_out[Z_in_bounds] = Z[Z_flat_idx]
+
+        # Stop if seismic data doesn't line up
+        if (np.isnan(EW_out).any() or np.isnan(NS_out).any() or np.isnan(Z_out).any()):
+            print('Error: Seismic data needs to span at least 30 minutes before AWS start time up until the final AWS time stamp.')
+            return None
+
+        # Apply Hann Window 
+        taper_length = int(0.02 * window_length) # 2% taper
+        window = np.ones(window_length) # Establish uniform window
+        hann = np.hanning(2 * taper_length) # Create hann window for both (2) sides of data
+        window[:taper_length] = hann[:taper_length] # Apply 2% to first half
+        window[-taper_length:] = hann[taper_length:] # Apply 2% to second half
+        # Apply
+        EW_win = EW_out * window[None, :]
+        NS_win = NS_out * window[None, :]
+        Z_win = Z_out * window[None, :]
+
+        # Compute rfft for each component
+        y_EW = rfft(EW_win, axis = 1)
+        y_NS = rfft(NS_win, axis = 1)
+        y_Z = rfft(Z_win, axis = 1)
+    
+        # Compute rfft frequency
+        freq = rfftfreq(window_length, 1/fs)
+
+        # Calculate power for each component
+        EW_p = np.abs(y_EW)**2
+        NS_p = np.abs(y_NS)**2
+        Z_p = np.abs(y_Z)**2
+
+        # Save spectra as a dictionary
+        spectra.append({'freq': freq,
+                        'EW': EW_p,
+                        'NS': NS_p,
+                        'Z': Z_p,
+                        'time' : aws_times,
+                        'aws_values' : aws_variable[1],
+                        'wind_direction' : aws_variable[2]})
+
+        all_spectra.append({station: spectra})
+       
+    return all_spectra
+
+###################################################################
+####################### Early Analysis ############################
+###################################################################
 
 def compare_seismic_wind(seismic_data, 
                          wind_data, 
@@ -946,179 +1522,6 @@ def wind_seis_energy_scatter(seismic_energy,
     plt.legend()
     plt.ylim(np.percentile(y, 2.5), np.percentile(y, 100 - 2.5))
     plt.tight_layout()
-    
-def apply_filter(wave_dict = None, 
-                 filter_type = None, 
-                 freqmin=None, 
-                 freqmax=None, 
-                 freq=None, 
-                 corners=4, 
-                 zerophase=True,
-                 save_mseed=False,
-                 config=None,
-                 read_file=True,
-                 filename='default_filter'):
-
-    """
-    Apply a filter to seismic waveform data stored in a dictionary without altering the original.
-
-    Parameters:
-    wave_dict (dict):
-        Dictionary containing seismic waveform data.
-    filter_type (str):
-        Type of filter to apply. 
-        Options include 'bandpass', 'bandstop', 'lowpass', 'highpass'.
-        'lowpass_cheby_2', 'lowpass_fir', 'remez_fir' currently unsupported.
-    freqmin (float):
-        Minimum frequency for bandpass/bandstop filters.
-    freqmax (float):
-        Maximum frequency for bandpass/bandstop filters.
-    freq (float):
-        Cutoff frequency for lowpass/highpass filters.
-    corners (int):
-        Number of corners for the filter.
-    zerophase (bool):
-        True/False. If True, apply a zero-phase filter.
-    save_mseed (bool):
-        True/False. True to save as mseed file.
-    config (dict):
-        Information from a config file containing the local "seismic_data_path".
-    read_file (bool):
-        True/False. True to switch on file checking.
-    filename (str):
-        Title of saved mseed file.
-
-    Returns:
-    filtered_dict (dict):
-        Dictionary containing filtered seismic waveform data.
-    """
-
-    # Path 
-    base_path = Path(config["seismic_data_path"]) if config else Path(".")
-    base_path.mkdir(parents=True, exist_ok=True)
-    file_path = (base_path / filename).with_suffix(".mseed")
-
-    # Read file if it exists
-    if file_path.exists():
-        if read_file == True:
-            print(f"Reading existing file: {file_path}")
-            stream = read(str(file_path))
-            filtered_dict = defaultdict(list)
-            for tr in stream:
-                filtered_dict[tr.stats.station].append(tr)
-
-    else:
-            
-        # Setup dictionary
-        filtered_dict = defaultdict(list)
-        streams = []
-        # Loop through and apply filter to the traces
-        for station_name, traces in wave_dict.items():
-            st = Stream([tr.copy() for tr in traces]) # Copy to avoid overwriting data
-
-            if filter_type in ('bandpass', 'bandstop'):
-                st.filter(type=filter_type, 
-                        freqmin=freqmin, 
-                        freqmax=freqmax, 
-                        corners=corners, 
-                        zerophase=zerophase)
-                streams.append(st)
-
-            elif filter_type in ('lowpass', 'highpass'): 
-                st.filter(type=filter_type, 
-                        freq=freq, 
-                        corners=corners, 
-                        zerophase=zerophase)
-                streams.append(st)
-
-            else:
-                raise ValueError(f"Unsupported filter type: {filter_type}") #'lowpass_cheby_2', 'lowpass_fir', 'remez_fir' currently not setup
-
-            filtered_dict[station_name] = st.traces # Write to a dictionary
-        
-        # Save as mseed file
-        if save_mseed == True:
-            merged_stream = streams[0].copy() # Copy to avoid overwriting data
-            for st in streams[1:]:
-                merged_stream += st
-            merged_stream.merge()
-
-            merged_stream.write(f'{str(file_path)}', format="MSEED")
-            print(f'Saved as {file_path}')
-
-    return filtered_dict
-
-def select_time(wave_dict=None, 
-                t_start=None, 
-                duration=None,
-                save_mseed=False,
-                config=None,
-                read_file=True,
-                filename='default_trim'):
-    
-    """
-    Select a specific time window from seismic waveform data stored in a dictionary without altering the original.
-
-    Parameters:
-    wave_dict (dict):
-        Dictionary containing seismic waveform data.
-    t_start (UTCDateTime):
-        Start time for the time window.
-    duration (float):
-        Duration of the time window in seconds.
-    save_mseed (bool):
-        True/False. True to save as mseed file.
-    config (dict):
-        Information from a config file containing the local "seismic_data_path".
-    read_file (bool):
-        True/False. True to switch on file checking.
-    filename (str):
-        Title of saved mseed file.
-    Returns:
-    new_dict (dict):
-        Dictionary containing selected seismic waveform data.
-    """
-
-    # Path 
-    base_path = Path(config["seismic_data_path"]) if config else Path(".")
-    base_path.mkdir(parents=True, exist_ok=True)
-    file_path = (base_path / filename).with_suffix(".mseed")
-
-    # Read file if it exists
-    if file_path.exists():
-        if read_file == True:
-            print(f"Reading existing file: {file_path}")
-            stream = read(str(file_path))
-            new_dict = defaultdict(list)
-            for tr in stream:
-                new_dict[tr.stats.station].append(tr)
-            
-            return new_dict
-        
-    else:
-        # Establish timespan
-        t_end = t_start + duration
-        streams = []
-        # Trim to desired timespan and write to a direction
-        new_dict = defaultdict(list)
-        for station_name in wave_dict:
-            st = Stream(wave_dict[station_name]).copy() # Copy to avoid overwriting data
-            st.trim(starttime=t_start, endtime=t_end, pad=False)
-            streams.append(st)
-            new_dict[station_name].extend(st.traces)
-
-        # Save as mseed file
-        if save_mseed == True:
-            merged_stream = streams[0].copy() # Copy to avoid overwriting data
-            for st in streams[1:]:
-                merged_stream += st
-            merged_stream.merge()
-
-            merged_stream.write(f'{str(file_path)}', format="MSEED")
-            print(f'Saved as {file_path}')
-
-    return new_dict
-
 
 def signal_to_noise(wave_dict, 
                     filtered_dict,
@@ -1326,27 +1729,6 @@ def montecarlo_optimal_snr(wind_speed,
         results.append(station_results)
 
     return best_result, results
-
-def find_channel(stream, options):
-    """
-    Find appropriate NS and EW Channels from a chosen stream.
-    Copied from align.py.
-    
-    Parameters:
-    stream (obspy.core.stream.Stream):
-        An ObsPy stream object.
-    options (list of str):
-        A list of channel codes.
-    """
-    # Loop through streams and find the associated channel code
-    traces = []
-    for ch in options:
-        traces.extend(stream.select(channel=ch))
-        if len(traces) > 0:
-            return traces # Return first channel code
-        
-    # If none are found
-    return None 
 
 def plot_statistics(monte_result,
                     ylabel = 'Power'):
@@ -1572,30 +1954,6 @@ def power_wind_freq_filter(wind_speed,
 
 
     return best_results, results
-
-def load_seis_data(config = None, filename = None, path = None):
-
-    if config:
-        # Path 
-        base_path = Path(config["seismic_data_path"]) if config else Path(".")
-        base_path.mkdir(parents=True, exist_ok=True)
-        if filename:
-            file_path = (base_path / filename).with_suffix(".mseed")
-        else:
-            print("Please provide a filename that exists in the seismic data path.")
-            return None
-    elif path:
-            file_path = Path(path)
-    else:
-        print("Please provide either a filename in the config seismic data path or a path to the seismic data.")
-        return None
-
-    print(f"Reading existing file: {file_path}")
-    stream = read(str(file_path))
-    new_dict = defaultdict(list)
-    for tr in stream:
-        new_dict[tr.stats.station].append(tr)
-    return new_dict
 
 def power_wind_fft(wind_speed,
                      wave_dict = None,
@@ -1837,332 +2195,10 @@ def power_wind_fft(wind_speed,
 
     return best_results, results
 
-def AWS_variable(data, 
-                variable='Wind speed in km/h',
-                year=None, 
-                month=None, 
-                day=None,
-                hour=None,
-                plot = True,
-                apply_smooth = False,
-                smoothie = 3):
-
-    """
-    Plots the a chosen variable for a given year and month from the provided DataFrame.
-    Always stores wind direction alongside the chosen variable as array element [2].
-
-    Parameters:
-    data (pd.DataFrame): 
-        The DataFrame containing the weather station data.
-    variable (str): 
-        The variable to plot. Must be a column heading in the DataFrame.
-    year (int): 
-        The year for plotting (2010-2025 or None for all years).
-    month (int or tuple): 
-        The month(s) for plotting.
-        None for the entire year,
-        A single month (1-12),
-        or a tuple of (start_month, end_month) for a range of months.
-    day (int or tuple): 
-        The day(s) for plotting.
-        None for the entire month,
-        A single day (1-31),
-        or a tuple of (start_day, end_day) for a range of days.
-    hour (int or tuple):
-        The hour(s) for plotting.
-        None for entire day,
-        A single hour (0-23),
-        or a tuple of (start_hour, end_hour) for a range of hours.
-    apply_smooth (bool): 
-        True/False. Applying ObsPy smooth() function.
-    smoothie (int):
-        Number of values to calculate moving average for smoothing.
-    """
-    
-    # Check if time inputs are single valued or a range.
-    # Year
-    if isinstance(year, (tuple, list)) and len(year) == 2: 
-        start_year, end_year = year 
-        df_slice = data[(data['datetime'].dt.year >= start_year) & 
-                        (data['datetime'].dt.year <= end_year) ].copy()
-    elif year is None or year < 2010 or year > 2025:
-        df_slice = data.copy()
-    else:
-        df_slice = data[data['datetime'].dt.year == year].copy()
-    # Month
-    if isinstance(month, (tuple, list)) and len(month) == 2: 
-        start_month, end_month = month 
-        df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
-                        (df_slice['datetime'].dt.month <= end_month) ].copy()
-    elif isinstance(month, int): 
-        df_slice = df_slice[df_slice['datetime'].dt.month == month].copy()
-    # Day
-    if isinstance(day, (tuple, list)) and len(day) == 2:
-        start_day, end_day = day
-        df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
-                            (df_slice['datetime'].dt.day <= end_day)].copy()
-    elif isinstance(day, int):
-        df_slice = df_slice[df_slice['datetime'].dt.day == day].copy()
-    # Hour
-    if isinstance(hour, (tuple, list)) and len(hour) == 2:
-        start_hour, end_hour = hour
-        df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
-                            (df_slice['datetime'].dt.hour <= end_hour)].copy()
-    elif isinstance(hour, int):
-        df_slice = df_slice[df_slice['datetime'].dt.hour == hour].copy()
-    
-    # Check if there is data
-    if df_slice.empty: 
-        print("No data available for the selected time period.") 
-        return
-
-    # Check if variable exists in the DataFrame
-    if variable not in df_slice.columns:
-        print(f"Variable '{variable}' not found in the DataFrame.")
-        return
-    
-    # Convert to numeric
-    df_slice[variable] = pd.to_numeric(df_slice[variable], errors='coerce')
-    var = df_slice[variable]
-
-    df_slice['Wind direction in degrees true'] = pd.to_numeric(df_slice['Wind direction in degrees true'], errors='coerce')
-    df_slice['Wind direction in degrees true'] %= 360
-    WD = df_slice['Wind direction in degrees true']
-
-    # Normalisation
-    # df_slice['Wind_norm'] = wind_speed / wind_speed.max()
-
-    # Smoothing
-    if apply_smooth == True:
-        var = smooth(var.to_numpy(), smoothie)
-        WD = smooth(WD.to_numpy(), smoothie)
-    else:
-        var = var.to_numpy()
-        WD = WD.to_numpy()
-
-    # Clean Data
-    valid_mask = ~np.isnan(var)
-
-    var = var[valid_mask]
-    WD = WD[valid_mask]
-    time = df_slice['datetime'].to_numpy()[valid_mask]
-
-    if plot == True:
-        
-        # Create Figure 
-        plt.figure(figsize=(15,6))
-
-        # Plot
-        plt.plot(time, var, 
-                color='black', linewidth=0.5)
-        
-        # Title construction
-        title = f"{variable} at Station {df_slice['Station Number'].iloc[0]} for "
-        # Year
-        if isinstance(year, (tuple, list)):
-            title += f"{year[0]} to {year[1]}"
-        elif year is None:
-            title += "All Years"
-        else:
-            title += f"{year}"
-        # Month
-        if isinstance(month, (tuple, list)):
-            title += f", Months:{month[0]} to {month[1]}"
-        elif isinstance(month, int):
-            title += f", Month:{month}"
-        # Day
-        if isinstance(day, (tuple, list)):
-            title += f", Days:{day[0]} to {day[1]}"
-        elif isinstance(day, int):
-            title += f", Day:{day}"
-        # Hour
-        if isinstance(hour, (tuple, list)):
-            title += f", Hours:{hour[0]} to {hour[1]}"
-        elif isinstance(hour, int):
-            title += f", Hour:{hour}"
-        plt.title(title)
-
-        # Plot Formating
-        plt.ylabel(f'{variable}')
-        plt.xlabel('Time')
-        plt.grid(alpha=0.3)
-        plt.tight_layout()
-        plt.show()
-
-    return time, var, WD
-
-def spectra_fft(aws_variable,
-                wave_dict = None,
-                config=None,
-                use_file = False,
-                seismic_mseed_name=None, 
-                pad_value=np.nan):
-
-    """
-    Trim 30 minute segments of seismic data which match AWS dataset.
-    Apply a real fast fourier transform to compute the frequency spectrum 
-    for each seismic component and calculate the powerfor each time step. 
-
-    Parameters:
-        aws_variable (array):
-            An array of AWS data in format 
-            aws_variable[0] (time), aws_variable[1] (variable array), aws_variable[2] (wind direction array).
-        wave_dict (dict):
-             A wave dictionary containing seismic waveform data.
-        config (dict):
-            Information from a config file containing the local "seismic_data_path".
-        use_file (bool):
-            True/False. True to switch on file checking for mseed file.
-        seismic_mseed_file (str):
-            Title of saved mseed file.
-            Seismic data must begin atleast 30 minutes before the first AWS timestamp
-            and end anytime after the final AWS timestamp.
-        pad_value (float):
-            Value to use for padding.
-
-    Returns:
-       all_spectra (list):
-            A list of dictionaries containing the frequency and power 
-            for each component (EW, NS, Z) for each station and time period.
-    """
-
-    # File and Storage
-    if use_file == True:
-        # Path 
-        base_path = Path(config["seismic_data_path"]) if config else Path(".")
-        base_path.mkdir(parents=True, exist_ok=True)
-        file_path = (base_path / seismic_mseed_name).with_suffix(".mseed")
-
-        # Read file if it exists
-        if file_path.exists():
-            print(f"Reading existing file: {file_path}")
-            stream = read(str(file_path))
-            wave_dict = defaultdict(list)
-            for tr in stream:
-                wave_dict[tr.stats.station].append(tr)
-        else:
-            print("No File Found")
-
-    else:
-        if wave_dict == None:
-            print('wave_dict not selected. Please input a file or a dictionary. (default: use_file = False )')
-            return None
-    
-    # Setup 
-    station_list = list(wave_dict.keys())
-    aws_times = aws_variable[0]   # timestamps
-    # EW, NS, Z components following real fast fourier transform (RFFT)
-    all_spectra = []
-
-    # Loop through all stations
-    for station in station_list:
-        
-        spectra = []
-
-        # Organise Streams
-        st = Stream(wave_dict[station])
-
-        # Puts in alphabetical order. 
-        # E, N, Z
-        st.sort(['channel'])   
-
-        EW = st.select(channel="*E")[0].data
-        NS = st.select(channel="*N")[0].data
-        Z  = st.select(channel="*Z")[0].data
-        
-        # EW, NS, Z all same length and freq
-        fs = st[0].stats.sampling_rate
-        start_time = st[0].stats.starttime
-
-        # Define Window Length Dependent on AWS
-        # 30 Min (times 60 sec) AWS Measurement window
-        # times seismic sampling rate
-        window_length = int(30 * 60 * fs)
-
-        # Setup time index list
-        start_i = []
-
-        # Loop through all time periods
-        for time in aws_times:
-            
-            # 30 min collection time before AWS measurement
-            t0 = UTC(str(time)) - timedelta(minutes=30)
-            # Define index
-            idx = int((t0 - start_time) * fs)
-            start_i.append(idx)
-        
-        # Convert to np array
-        start_i = np.array(start_i)
-        # Define n
-        n_starts = start_i.shape[0]
-
-        # Setup Output Arrays
-        EW_out = np.full((n_starts, window_length), pad_value, dtype=EW.dtype) 
-        NS_out = np.full((n_starts, window_length), pad_value, dtype=NS.dtype) 
-        Z_out = np.full((n_starts, window_length), pad_value, dtype=Z.dtype) 
-
-        # Define the offsets
-        offsets = np.arange(window_length)
-
-        # Define the seismic index based on the offsets
-        index = start_i[:, None] + offsets[None, :]
-
-        # Check if data exists within the index bounds
-        EW_in_bounds = (index >= 0) & (index < EW.shape[0])
-        NS_in_bounds = (index >= 0) & (index < NS.shape[0])
-        Z_in_bounds = (index >= 0) & (index < Z.shape[0])
-
-        # Define the valid indicies
-        EW_flat_idx = index[EW_in_bounds]
-        NS_flat_idx = index[NS_in_bounds]
-        Z_flat_idx = index[Z_in_bounds]
-
-        # Place the balid indicies into the output arrays
-        EW_out[EW_in_bounds] = EW[EW_flat_idx]
-        NS_out[NS_in_bounds] = NS[NS_flat_idx]
-        Z_out[Z_in_bounds] = Z[Z_flat_idx]
-
-        # Stop if seismic data doesn't line up
-        if (np.isnan(EW_out).any() or np.isnan(NS_out).any() or np.isnan(Z_out).any()):
-            print('Error: Seismic data needs to span at least 30 minutes before AWS start time up until the final AWS time stamp.')
-            return None
-
-        # Apply Hann Window 
-        taper_length = int(0.02 * window_length) # 2% taper
-        window = np.ones(window_length) # Establish uniform window
-        hann = np.hanning(2 * taper_length) # Create hann window for both (2) sides of data
-        window[:taper_length] = hann[:taper_length] # Apply 2% to first half
-        window[-taper_length:] = hann[taper_length:] # Apply 2% to second half
-        # Apply
-        EW_win = EW_out * window[None, :]
-        NS_win = NS_out * window[None, :]
-        Z_win = Z_out * window[None, :]
-
-        # Compute rfft for each component
-        y_EW = rfft(EW_win, axis = 1)
-        y_NS = rfft(NS_win, axis = 1)
-        y_Z = rfft(Z_win, axis = 1)
-    
-        # Compute rfft frequency
-        freq = rfftfreq(window_length, 1/fs)
-
-        # Calculate power for each component
-        EW_p = np.abs(y_EW)**2
-        NS_p = np.abs(y_NS)**2
-        Z_p = np.abs(y_Z)**2
-
-        # Save spectra as a dictionary
-        spectra.append({'freq': freq,
-                        'EW': EW_p,
-                        'NS': NS_p,
-                        'Z': Z_p,
-                        'time' : aws_times,
-                        'aws_values' : aws_variable[1],
-                        'wind_direction' : aws_variable[2]})
-
-        all_spectra.append({station: spectra})
-       
-    return all_spectra
+###################################################################
+################### Early Model Analysis ##########################
+###### Simple Correlations and Finding Optimal Frequencies ########
+###################################################################
         
 def seis_aws_fft_cor(spectra,
                     fmin = 1,
@@ -2310,8 +2346,7 @@ def seis_aws_fft_cor(spectra,
 
 
     return best_results, results
-                
-               
+                           
 def single_rf(spectra,
                 fmin = 1,
                 fmax = 49,
@@ -2846,7 +2881,6 @@ def single_ridge(spectra,
                                 
     return best_r_results, results
 
-
 def single_elasticnet(spectra,
                         fmin = 1,
                         fmax = 49,
@@ -3336,7 +3370,6 @@ def single_svr(spectra,
                                 
     return best_r_results, results
 
-
 def single_pca_ridge(spectra,
                    fmin = 1,
                    fmax = 49,
@@ -3597,6 +3630,11 @@ def single_pca_ridge(spectra,
                                 
     return best_r_results, results
 
+###################################################################
+################### Early Model Analysis 2 ########################
+###### Simple Correlations and Finding Optimal Models #############
+###################################################################
+
 def full_pca_ridge(spectra,
                    fmin = 1,
                    fmax = 49,
@@ -3771,7 +3809,6 @@ def full_pca_ridge(spectra,
         print(f"Results saved to {csv_name}")
                                 
     return results
-
 
 def full_svr(spectra,
              fmin = 1,
@@ -3963,7 +4000,6 @@ def full_svr(spectra,
         print(f"Results saved to {csv_name}")
                                 
     return results
-
 
 def full_elasticnet(spectra,
                     fmin = 1,
@@ -4337,8 +4373,7 @@ def full_ridge(spectra,
         print(f"Results saved to {csv_name}")
                                 
     return results
-
-            
+       
 def full_rf(spectra,
                 fmin = 1,
                 fmax = 49,
@@ -4663,7 +4698,6 @@ def full_rf(spectra,
                                 
     return results
         
-
 def combined_comp_rf(spectra,
                 fmin = 1,
                 fmax = 49,
@@ -4916,7 +4950,6 @@ def combined_comp_rf(spectra,
 
     return results
         
-
 def var_dir_rf(spectra,
                 fmin = 1,
                 fmax = 49,
@@ -5261,6 +5294,12 @@ def var_dir_rf(spectra,
 
     return results
 
+
+###################################################################
+################### Primary Model Analysis ########################
+######## Optimised Workflows for determining WS and WD  ###########
+##################### From Seismic Data ###########################
+###################################################################
 
 def full_spectrum_RF_WS_WD(spectra,
                             fmin = 1,

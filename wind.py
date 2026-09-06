@@ -5294,10 +5294,9 @@ def var_dir_rf(spectra,
 
     return results
 
-
 ###################################################################
 ################### Primary Model Analysis ########################
-######## Optimised Workflows for determining WS and WD  ###########
+######## Optimised Workflows for Predicting WS and WD  ############
 ##################### From Seismic Data ###########################
 ###################################################################
 
@@ -5318,7 +5317,7 @@ def full_spectrum_RF_WS_WD(spectra,
     """
     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
     using a Random Forest regression model. Combines all seismic components into one model.
-    Slightly different to var_dir_rf1(). Includes a y_test array of AWS and WD. 
+    Includes a y_test array of AWS and WD. 
     Multi Output model.
 
     Parameters:
@@ -5487,6 +5486,1736 @@ def full_spectrum_RF_WS_WD(spectra,
         sin_importance = permutation_importance(sin_model, X_all_test, y_sin_test, n_repeats=n_repeats, scoring='r2').importances_mean
         cos_importance = permutation_importance(cos_model, X_all_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
         #dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
+
+        # Store results
+        station_results.append({
+            'fmin': fmin,
+            'fmax': fmax,
+            'var_r2': var_r2,
+            'sin_r2': sin_r2,
+            'cos_r2': cos_r2,
+            'var_rmse': var_rmse,
+            'sin_rmse': sin_rmse,
+            'cos_rmse': cos_rmse,
+            'y_var_test': y_var_test,
+            'y_sin_test': y_sin_test,
+            'y_cos_test': y_cos_test,
+            'var_pred': var_pred,
+            'sin_pred': sin_pred,
+            'cos_pred': cos_pred,
+            'var_cv_r2': var_scores.mean(),
+            'sin_cv_r2': sin_scores.mean(),
+            'cos_cv_r2': cos_scores.mean(),
+            'var_cv_std': var_scores.std(),
+            'sin_cv_std': sin_scores.std(),
+            'cos_cv_std': cos_scores.std(),
+            'dir_pred': dir_pred,
+            'dir_test': dir_test,
+            'dir_mean_error': dir_mean,
+            'dir_rmse': dir_rmse}) 
+        
+        # Print best result
+        # R²
+        print(f"{variable_name} R²: {var_r2:.4f}")
+        print(f"Sin R²: {sin_r2:.4f}")
+        print(f"Cos R²: {cos_r2:.4f}")
+
+        # rmse
+        print(f"{variable_name} rmse: {var_rmse:.4f}")
+        print(f"Sin rmse: {sin_rmse:.4f}")
+        print(f"Cos rmse: {cos_rmse:.4f}")
+
+        # Cross Validation R²
+        print(f"{variable_name} cv R²: {var_scores.mean():.4f} +/- {var_scores.std():.4f}")
+        print(f"Sin cv R²: {sin_scores.mean():.4f} +/- {sin_scores.std():.4f}")
+        print(f"Cos cv R²: {cos_scores.mean():.4f} +/- {cos_scores.std():.4f}")
+        results.append(station_results)
+
+        # WD
+        print(f"Wind direction Mean Error: {dir_mean:.2f}°")
+        print(f"Wind direction RMSE: {dir_rmse:.2f}°")
+
+        # Plot all average R² and rmse results against centre frequency
+        if plot_stat_results == True:
+            
+            # AWS Variable
+            Z_var_importance = var_importance[:n_bands]
+            NS_var_importance = var_importance[n_bands:2*n_bands]
+            EW_var_importance = var_importance[2*n_bands:3*n_bands]
+            # AWS Direction
+            #Z_dir_importance = dir_importance[:n_bands]
+            #NS_dir_importance = dir_importance[n_bands:2*n_bands]
+            #EW_dir_importance = dir_importance[2*n_bands:3*n_bands]
+
+            # Plot
+            fig, ax = plt.subplots(1, 3, figsize=(8, 6))
+            ax[0].plot(band_centres, Z_var_importance)
+            ax[0].set_title(f'Z {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[0].set_ylim(top=1)
+            ax[1].plot(band_centres, NS_var_importance)
+            ax[1].set_title(f'NS {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[1].set_ylim(top=1)
+            ax[2].plot(band_centres, EW_var_importance)
+            ax[2].set_title(f'EW {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[2].set_ylim(top=1)
+            #ax[1, 0].plot(band_centres, Z_dir_importance)
+            #ax[1, 0].set_title(f'Combined Z Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 0].set_ylim(top=1)
+            #ax[1, 1].plot(band_centres, NS_dir_importance)
+            #ax[1, 1].set_title(f'Combined NS Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 1].set_ylim(top=1)
+            #ax[1, 2].plot(band_centres, EW_dir_importance)
+            #ax[1, 2].set_title(f'Combined EW Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 2].set_ylim(top=1)
+
+            fig.suptitle(f'{station}:')
+            fig.supxlabel('Frequency (Hz)')
+            fig.supylabel('RF Permutation Importance')
+            fig.tight_layout()
+
+        # Plot key results
+        if plot_results == True:
+
+            # Plot obs vs pred WS
+            # AWS Variable
+            # Plot
+            plt.figure(figsize=(10, 10))
+            plt.scatter(y_var_test, var_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+
+            # y = x line
+            plt.plot([y_var_test.min(), y_var_test.max()],
+                    [y_var_test.min(), y_var_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            plt.xlabel(f"Observed {variable_name}", fontsize = 20)
+            plt.ylabel(f"Predicted {variable_name}", fontsize = 20)
+            plt.title(f"{station} {variable_name}", fontsize = 25)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
+            plt.legend(fontsize = 20, loc ='upper left')
+            plt.tight_layout()
+
+            # Plot obs vs pred Wind Direction
+            # sin2theta and cos2theta
+            fig, ax = plt.subplots(2,1, figsize=(10, 10))
+            ax[0].scatter(y_sin_test, sin_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            ax[1].scatter(y_cos_test, cos_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            
+            # y = x line
+            ax[0].plot([y_sin_test.min(), y_sin_test.max()],
+                    [y_sin_test.min(), y_sin_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            ax[1].plot([y_cos_test.min(), y_cos_test.max()],
+                    [y_cos_test.min(), y_cos_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            ax[0].set_xlabel("Observed Wind Direction Sin2Theta", fontsize = 20)
+            ax[0].set_ylabel("Predicted Wind Direction Sin2Theta", fontsize = 20)
+            ax[0].set_title(f"{station} Wind Direction Sin2Theta", fontsize = 25)
+            ax[1].set_xlabel("Observed Wind Direction Cos2Theta", fontsize = 20)
+            ax[1].set_ylabel("Predicted Wind Direction Cos2Theta", fontsize = 20)
+            ax[1].set_title(f"{station} Wind Direction Cos2Theta", fontsize = 25)
+            ax[0].tick_params(axis='both', which='major', labelsize=20)
+            ax[1].tick_params(axis='both', which='major', labelsize=20)
+            fig.tight_layout()
+
+            # Sin2 and Cos2 Converted back to angle
+            plt.figure(figsize=(10, 10))
+            plt.scatter(dir_test, dir_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            
+            # y = x line
+            plt.plot([dir_test.min(), dir_test.max()],
+                    [dir_test.min(), dir_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            plt.xlabel("Observed Wind Direction (°)", fontsize = 20)
+            plt.ylabel("Predicted Wind Direction (°)", fontsize = 20)
+            plt.title(f"{station} Wind Direction (°)", fontsize = 25)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
+            plt.legend(fontsize = 20, loc ='upper left')
+            plt.tight_layout()
+
+            # Plot Wind Direction
+            # Wind direction
+            cardinals = {"N": 0,           
+                        "E": (np.pi / 2),
+                        "S": (np.pi),
+                        "W": (3 * np.pi / 2)}
+            # Plot
+            plt.figure(figsize=(10, 6))
+            plt.polar()      
+            plt.scatter(dir_test_radian, np.ones(len(dir_test_radian)) * 0.8, alpha=0.7, label = 'Observed Wind Direction')
+            plt.scatter(np.deg2rad(dir_pred), np.ones(len(dir_test_radian)) * 0.85, alpha=0.7, label = 'Predicted Wind Direction')
+
+            # Make it Pretty
+            plt.gca().set_theta_zero_location('N')
+            plt.gca().set_theta_direction(-1)
+            plt.title(f"{station} Wind Direction", pad = 50)
+            plt.gca().set_rlabel_position(0)
+            plt.ylim(0,1)
+            # Add cardinal direction labels
+            for label, angle in cardinals.items():
+                            plt.text(
+                                angle,
+                                1.2,
+                                label,
+                                ha="center",
+                                va="center",
+                                fontsize=12,
+                                fontweight="bold",
+                                clip_on=False)
+            # Legend
+            plt.legend(loc = 'upper right', bbox_to_anchor = (1.55, 1.18))
+            # Design
+            plt.tight_layout()
+
+            # Plot WS, WD, Seis Power
+            # AWS Variable and Wind direction
+
+            # Best frequency index for seismic power
+            var_best = np.argmax(var_importance)
+
+            if var_best < n_bands:
+
+                best_component = "Z"
+                best_index = var_best
+                best_var = X_all_test[:, var_best]
+
+            elif var_best < 2*n_bands:
+
+                best_component = "NS"
+                best_index = var_best - n_bands
+                best_var = X_all_test[:, var_best]
+
+            else:
+
+                best_component = "EW"
+                best_index = var_best - 2*n_bands
+                best_var = X_all_test[:, var_best]
+
+            # Best Centre frequencies
+            freq_best = band_centres[best_index]
+
+            # Create plot
+            plt.figure(figsize=(10,6))
+            ax = plt.subplot(projection='polar')
+            plt.polar()
+            # Colour bar
+            power_colours = best_var
+            cmap = matplotlib.cm.get_cmap('plasma')
+            new_cmap = matplotlib.colors.LinearSegmentedColormap.from_list('snipped_cmap', cmap(np.linspace(0, 0.90, 256)))
+            #cmap2 = matplotlib.cm.get_cmap('cool') # For error magnitude
+            # Plot measurements
+            obs = ax.scatter(dir_test_radian, y_var_test, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Observed {variable_name}', marker='x')
+            pred = ax.scatter(np.deg2rad(dir_pred), var_pred, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Predicted {variable_name}', marker='^')
+            # Plot error mag line between pred and obs point
+
+            # WS error
+            # Not useful yet, but could be used to colour the line between obs and pred points
+            #ws_error = np.abs(y_var_test - var_pred)
+            # Combined error magnitude. Cant just combine WS and WD so left out for now
+            #error_mag = np.sqrt(dir_fix**2 + ws_error**2)
+            #error_norm = matplotlib.colors.Normalize(vmin=error_mag.min(), vmax=error_mag.max())
+
+            for i in range(len(dir_test_radian)):
+                ax.plot([dir_test_radian[i], np.deg2rad(dir_pred[i])], [y_var_test[i], var_pred[i]], color='grey', alpha=1, linewidth=0.8)
+            # Make it pretty
+            ax.set_theta_zero_location('N')
+            ax.set_theta_direction(-1)
+            ax.set_ylabel(f'{variable_name}', labelpad=55, fontsize = 12)
+            ax.set_title(f"{station}: {variable_name} and Wind Direction", pad = 60, fontsize = 25)
+            ax.set_rlabel_position(0)
+            ax.tick_params(labelsize = 12)
+            rmax = ax.get_rmax()
+            # Add cardinal direction labels
+            for label, angle in cardinals.items():
+                            ax.text(
+                                angle,
+                                rmax * 1.3,
+                                label,
+                                ha="center",
+                                va="center",
+                                fontsize=15,
+                                fontweight="bold",
+                                clip_on=False)
+            # More pretty
+            plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
+            # Seismic Colour Bar
+            cbar = plt.colorbar(obs, ax=ax, pad=0.1)
+            cbar.set_label(f'Log Seismic Power\n{best_component}, {freq_best[0]:.1f} Hz', size = 12)
+            # Error Colour Bar
+            # Need to think of a good way to represent error well. Cant just combine WS and WD
+            #sm = matplotlib.cm.ScalarMappable(norm=error_norm, cmap=cmap2)
+            #sm.set_array([])   # required placeholder
+            #cbar2 = plt.colorbar(sm, ax=ax, pad=0.1)
+            #cbar2.set_label("Error Magnitude", fontsize=12)
+
+                                        
+            cbar.ax.tick_params(labelsize=12)
+            #cbar2.ax.tick_params(labelsize=12)
+            plt.tight_layout()
+
+        # Plot WS Residiuals
+        if plot_residuals == True:
+
+            fig, ax = plt.subplots(1, 3, figsize=(8, 8))
+            ax[0].scatter(var_pred, y_var_test - var_pred)
+            ax[0].axhline(0, color='red', linestyle='--')
+            ax[0].set_xlabel(f"Predicted {variable_name}")
+            ax[0].set_ylabel("Residual (Observed - Predicted)")
+            ax[0].set_title(f"Residual Plot for {station}, {variable_name}")
+            ax[1].scatter(sin_pred, y_sin_test - sin_pred)
+            ax[1].axhline(0, color='red', linestyle='--')
+            ax[1].set_xlabel("Predicted Wind Direction Sin")
+            ax[1].set_ylabel("Residual (Observed - Predicted)")
+            ax[1].set_title(f"Residual Plot for {station}, Wind Direction Sin")
+            ax[2].scatter(cos_pred, y_cos_test - cos_pred)
+            ax[2].axhline(0, color='red', linestyle='--')
+            ax[2].set_xlabel("Predicted Wind Direction Cos")
+            ax[2].set_ylabel("Residual (Observed - Predicted)")
+            ax[2].set_title(f"Residual Plot for {station}, Wind Direction Cos")
+            fig.tight_layout()
+
+        # Plot Observed WS and seis power
+        if plot_power_aws == True:
+
+            # LogSeismic Power vs Obs AWS  
+
+            # Best frequency index for power
+            var_best = np.argmax(var_importance)
+
+            if var_best < n_bands:
+
+                best_component = "Z"
+                best_index = var_best
+                best_var = X_all_test[:, var_best]
+
+                
+            elif var_best < 2*n_bands:
+
+                best_component = "NS"
+                best_index = var_best - n_bands
+                best_var = X_all_test[:, var_best]
+
+            
+            else:
+
+                best_component = "EW"
+                best_index = var_best - 2*n_bands
+                best_var = X_all_test[:, var_best]
+
+                
+            # Best Centre frequencies
+            freq = band_centres[best_index]
+
+            # Sort for plot
+            idx = np.argsort(best_var)
+            x_sort = best_var[idx]
+
+            # Polynomial 
+            # Reshape x values
+            poly_x = best_var.reshape(-1,1)
+            # Create Pipeline 
+            poly = make_pipeline(PolynomialFeatures(degree=poly_degree), LinearRegression()).fit(poly_x, y_var_test)
+            # Calculate R² 
+            poly_r2 = poly.score(poly_x, y_var_test)
+            # Predict
+            poly_pred = poly.predict(poly_x)[idx]
+            # Coefficients
+            linear_model = poly.named_steps['linearregression']
+            coefficients = linear_model.coef_
+            intercept = linear_model.intercept_
+            # Equation
+            if poly_degree == 1:
+                equation = f"y = {coefficients[1]:.2f}x + {intercept:2f}"
+            elif poly_degree == 2:
+                equation = f"y = {coefficients[2]:.2f}x$^{2}$ + {coefficients[1]:.2f}x + {intercept:.2f}"
+            else:
+                print('Calculation only for poly_degree = 1 or 2')
+                equation = 'Equation not calculated'
+
+            # Create plots
+            plt.figure(figsize=(10,10))
+            plt.scatter(best_var, y_var_test, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+
+            # Plot
+            plt.plot(x_sort, poly_pred, 'r--', linewidth = 4, label = f'{equation} \nR² = {poly_r2:.2f}')
+            plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz", fontsize = 25)
+            # Make pretty
+            plt.legend(fontsize = 20)
+            plt.xlabel("Log Seismic Power", fontsize = 20)
+            plt.ylabel(f"Observed {variable_name}", fontsize = 20)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
+            plt.tight_layout()
+
+        # Find best 10 frequency bands for each component     
+        top_ten = np.argsort(var_importance)[::-1][:10]
+
+        for index in top_ten:
+
+            if index < n_bands:
+                component = "Z"
+                freq_index = index
+
+            elif index < 2 * n_bands:
+                component = "NS"
+                freq_index = index - n_bands
+
+            else:
+                component = "EW"
+                freq_index = index - 2 * n_bands
+
+            frequency = band_centres[freq_index]
+
+            # Print them
+            print(f"{component}: {frequency[0]:.1f} Hz, importance = {var_importance[index]:.4f}")
+
+    return results
+
+def full_spectrum_SVR_WS_WD(spectra,
+                            fmin = 1,
+                            fmax = 49,
+                            f_band_width = 1,
+                            step_size = 1,
+                            n_repeats = 3,
+                            min_WS = None,
+                            poly_degree = 2,
+                            plot_stat_results = True,
+                            plot_results = True,
+                            plot_residuals = True,
+                            plot_power_aws = True,
+                            variable_name = 'AWS Wind Speed (km/hr)'):
+    
+    """
+    Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
+    using a SVR regression model. Combines all seismic components into one model.
+    Includes a y_test array of AWS and WD. 
+    Multi Output model.
+
+    Parameters:
+        spectra (list):
+            A list of dictionaries containing the frequency, power, and Wind Speed data 
+            for each seismic component (EW, NS, Z) for each station and time period.
+        fmin (int):
+            Minimum frequency value for calculating the power of each bandwidths.
+        fmax (int):
+            Maximum frequency value for calculating the power of each  bandwidths.
+        f_band_width (int):
+            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+        step_size (int):
+            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+        n_repeats (int):
+            Number of times to repeat the permutation importance calculation for each seismic component.
+        min_WS (int):
+            Minimum wind speed (km/hr) to be considered in analysis.
+        poly_degree (int):
+            Polynomial degree for the regression in plot_power_aws (Seis Power vs Obs WS)
+        plot_stat_results (bool):
+            Plots all the R² and rmse values against frequency bandwidth centres.
+        plot_results (bool):
+            Plots the predicted vs observed values for each seismic component.
+        plot_cv (bool):
+            Plot the cross validation results as boxplots       
+        plot_power_aws (bool):
+            Plot the relationship between seismic power and AWS values.
+        variable_name (str):
+            The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
+
+    Outputs:
+        results (list):
+            A list of dictionaries containing information about all the correlation results for each station.
+    """
+    
+    # Setup Result Lists
+    results = []
+
+    # Bands
+    # Create Bandwidths
+    bands = []
+    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+        f2 = f1 + f_band_width
+        band = (f1, f2)
+        bands.append(band)
+    # Num of Bands
+    n_bands = len(bands)
+    # Create Band Centers
+    band_centres = []
+    for f1, f2 in bands:
+        band_centre = [(f1 + f2)/2]
+        band_centres.append(band_centre)
+
+    # Loop through stations
+    for station_dict in spectra:
+
+        # Setup Variables
+        station = list(station_dict.keys())[0] 
+        EW_power = station_dict[station][0]['EW']
+        NS_power = station_dict[station][0]['NS']
+        Z_power = station_dict[station][0]['Z']
+        freq = station_dict[station][0]['freq']
+        aws_values = station_dict[station][0]['aws_values']
+        wind_direction = station_dict[station][0]['wind_direction']
+
+        # Angle wrap around problem
+        dir_radians = np.deg2rad(wind_direction)
+        dir_sin = np.sin(dir_radians)
+        dir_cos = np.cos(dir_radians)
+        
+        # Setup results
+        station_results = []
+        
+        # Setup powers
+        X_Z = np.zeros((len(aws_values), len(bands)))
+        X_NS = np.zeros((len(aws_values), len(bands)))
+        X_EW = np.zeros((len(aws_values), len(bands)))
+
+        # Apply bandwidths to data
+        for i, (f1,f2) in enumerate(bands):
+            band_width = (freq >= f1) & (freq < f2)
+
+            # Convert to log to better inspect power scales and apply bandwidth
+            # [:, band_width], select frequencies and slice unwanted freq data from the row
+            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+
+        # Stack all together to process all together as a larger dataset
+        X_all = np.column_stack([X_Z, X_NS, X_EW])
+        y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+       
+        # Should the wind speed threshold be applied before or after training the model?
+        # Apply minimum WS threshold
+        if min_WS is not None:
+            mask = y_all[:, 0] > min_WS
+            X_all = X_all[mask]
+            y_all = y_all[mask]
+            
+        # Train Model
+        X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
+
+        # Pipeline
+        # Scale, SVR
+        # (Need to find optimal values)
+        var_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=1.0, epsilon=0.2))])
+        sin_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=1.0, epsilon=0.2))])
+        cos_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=1.0, epsilon=0.2))])
+
+        # Cross Validation
+        cv = KFold(n_splits=5, shuffle=True, random_state=42)
+        var_scores = cross_val_score(var_model, X_all, y_all[:, 0], cv=cv, scoring='r2')
+        sin_scores = cross_val_score(sin_model, X_all, y_all[:, 1], cv=cv, scoring='r2')
+        cos_scores = cross_val_score(cos_model, X_all, y_all[:, 2], cv=cv, scoring='r2')
+
+        # Fit Model
+        var_model.fit(X_all_train, y_all_train[:,0])
+        sin_model.fit(X_all_train, y_all_train[:, 1])
+        cos_model.fit(X_all_train, y_all_train[:, 2])
+
+        # Predictions
+        var_pred = var_model.predict(X_all_test)
+        sin_pred = sin_model.predict(X_all_test)
+        cos_pred = cos_model.predict(X_all_test)
+
+        # Round WS Prediction to one decimal so it matches with AWS Measurement
+        var_pred = np.round(var_pred, decimals=1)
+
+        # Observed
+        y_var_test = y_all_test[:, 0]
+        y_sin_test = y_all_test[:, 1]
+        y_cos_test = y_all_test[:, 2]
+
+    
+        # Predicted direction
+        dir_pred_radian = np.arctan2(sin_pred, cos_pred)
+        dir_pred = np.rad2deg(dir_pred_radian)
+
+        # Round to nearest 10 degrees
+        dir_pred = np.round(dir_pred, decimals=-1)
+        
+        # Wrap back to 0-360 degrees
+        dir_pred = dir_pred % 360 
+
+        # Fix angles near end points
+        dir_test_radian = np.arctan2(y_sin_test, y_cos_test)
+        dir_test = np.rad2deg(dir_test_radian) % 360
+        dir_fix = np.abs((dir_pred - dir_test + 180) % 360 - 180)
+
+        # Mean direction
+        dir_mean = np.mean(dir_fix)
+
+        # rmse
+        var_rmse = np.sqrt(mean_squared_error(y_var_test, var_pred))
+        sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
+        cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
+        dir_rmse = np.sqrt(np.mean(dir_fix**2))
+
+        # R²
+        var_r2 = r2_score(y_var_test, var_pred)
+        sin_r2 = r2_score(y_sin_test, sin_pred)
+        cos_r2 = r2_score(y_cos_test, cos_pred)
+
+        # Freq Importance
+        var_importance = permutation_importance(var_model, X_all_test, y_var_test, n_repeats=n_repeats, scoring='r2').importances_mean
+        sin_importance = permutation_importance(sin_model, X_all_test, y_sin_test, n_repeats=n_repeats, scoring='r2').importances_mean
+        cos_importance = permutation_importance(cos_model, X_all_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
+        #dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
+
+        # Store results
+        station_results.append({
+            'fmin': fmin,
+            'fmax': fmax,
+            'var_r2': var_r2,
+            'sin_r2': sin_r2,
+            'cos_r2': cos_r2,
+            'var_rmse': var_rmse,
+            'sin_rmse': sin_rmse,
+            'cos_rmse': cos_rmse,
+            'y_var_test': y_var_test,
+            'y_sin_test': y_sin_test,
+            'y_cos_test': y_cos_test,
+            'var_pred': var_pred,
+            'sin_pred': sin_pred,
+            'cos_pred': cos_pred,
+            'var_cv_r2': var_scores.mean(),
+            'sin_cv_r2': sin_scores.mean(),
+            'cos_cv_r2': cos_scores.mean(),
+            'var_cv_std': var_scores.std(),
+            'sin_cv_std': sin_scores.std(),
+            'cos_cv_std': cos_scores.std(),
+            'dir_pred': dir_pred,
+            'dir_test': dir_test,
+            'dir_mean_error': dir_mean,
+            'dir_rmse': dir_rmse}) 
+        
+        # Print best result
+        # R²
+        print(f"{variable_name} R²: {var_r2:.4f}")
+        print(f"Sin R²: {sin_r2:.4f}")
+        print(f"Cos R²: {cos_r2:.4f}")
+
+        # rmse
+        print(f"{variable_name} rmse: {var_rmse:.4f}")
+        print(f"Sin rmse: {sin_rmse:.4f}")
+        print(f"Cos rmse: {cos_rmse:.4f}")
+
+        # Cross Validation R²
+        print(f"{variable_name} cv R²: {var_scores.mean():.4f} +/- {var_scores.std():.4f}")
+        print(f"Sin cv R²: {sin_scores.mean():.4f} +/- {sin_scores.std():.4f}")
+        print(f"Cos cv R²: {cos_scores.mean():.4f} +/- {cos_scores.std():.4f}")
+        results.append(station_results)
+
+        # WD
+        print(f"Wind direction Mean Error: {dir_mean:.2f}°")
+        print(f"Wind direction RMSE: {dir_rmse:.2f}°")
+
+        # Plot all average R² and rmse results against centre frequency
+        if plot_stat_results == True:
+            
+            # AWS Variable
+            Z_var_importance = var_importance[:n_bands]
+            NS_var_importance = var_importance[n_bands:2*n_bands]
+            EW_var_importance = var_importance[2*n_bands:3*n_bands]
+            # AWS Direction
+            #Z_dir_importance = dir_importance[:n_bands]
+            #NS_dir_importance = dir_importance[n_bands:2*n_bands]
+            #EW_dir_importance = dir_importance[2*n_bands:3*n_bands]
+
+            # Plot
+            fig, ax = plt.subplots(1, 3, figsize=(8, 6))
+            ax[0].plot(band_centres, Z_var_importance)
+            ax[0].set_title(f'Z {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[0].set_ylim(top=1)
+            ax[1].plot(band_centres, NS_var_importance)
+            ax[1].set_title(f'NS {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[1].set_ylim(top=1)
+            ax[2].plot(band_centres, EW_var_importance)
+            ax[2].set_title(f'EW {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[2].set_ylim(top=1)
+            #ax[1, 0].plot(band_centres, Z_dir_importance)
+            #ax[1, 0].set_title(f'Combined Z Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 0].set_ylim(top=1)
+            #ax[1, 1].plot(band_centres, NS_dir_importance)
+            #ax[1, 1].set_title(f'Combined NS Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 1].set_ylim(top=1)
+            #ax[1, 2].plot(band_centres, EW_dir_importance)
+            #ax[1, 2].set_title(f'Combined EW Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 2].set_ylim(top=1)
+
+            fig.suptitle(f'{station}:')
+            fig.supxlabel('Frequency (Hz)')
+            fig.supylabel('RF Permutation Importance')
+            fig.tight_layout()
+
+        # Plot key results
+        if plot_results == True:
+
+            # Plot obs vs pred WS
+            # AWS Variable
+            # Plot
+            plt.figure(figsize=(10, 10))
+            plt.scatter(y_var_test, var_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+
+            # y = x line
+            plt.plot([y_var_test.min(), y_var_test.max()],
+                    [y_var_test.min(), y_var_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            plt.xlabel(f"Observed {variable_name}", fontsize = 20)
+            plt.ylabel(f"Predicted {variable_name}", fontsize = 20)
+            plt.title(f"{station} {variable_name}", fontsize = 25)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
+            plt.legend(fontsize = 20, loc ='upper left')
+            plt.tight_layout()
+
+            # Plot obs vs pred Wind Direction
+            # sin2theta and cos2theta
+            fig, ax = plt.subplots(2,1, figsize=(10, 10))
+            ax[0].scatter(y_sin_test, sin_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            ax[1].scatter(y_cos_test, cos_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            
+            # y = x line
+            ax[0].plot([y_sin_test.min(), y_sin_test.max()],
+                    [y_sin_test.min(), y_sin_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            ax[1].plot([y_cos_test.min(), y_cos_test.max()],
+                    [y_cos_test.min(), y_cos_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            ax[0].set_xlabel("Observed Wind Direction Sin2Theta", fontsize = 20)
+            ax[0].set_ylabel("Predicted Wind Direction Sin2Theta", fontsize = 20)
+            ax[0].set_title(f"{station} Wind Direction Sin2Theta", fontsize = 25)
+            ax[1].set_xlabel("Observed Wind Direction Cos2Theta", fontsize = 20)
+            ax[1].set_ylabel("Predicted Wind Direction Cos2Theta", fontsize = 20)
+            ax[1].set_title(f"{station} Wind Direction Cos2Theta", fontsize = 25)
+            ax[0].tick_params(axis='both', which='major', labelsize=20)
+            ax[1].tick_params(axis='both', which='major', labelsize=20)
+            fig.tight_layout()
+
+            # Sin2 and Cos2 Converted back to angle
+            plt.figure(figsize=(10, 10))
+            plt.scatter(dir_test, dir_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            
+            # y = x line
+            plt.plot([dir_test.min(), dir_test.max()],
+                    [dir_test.min(), dir_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            plt.xlabel("Observed Wind Direction (°)", fontsize = 20)
+            plt.ylabel("Predicted Wind Direction (°)", fontsize = 20)
+            plt.title(f"{station} Wind Direction (°)", fontsize = 25)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
+            plt.legend(fontsize = 20, loc ='upper left')
+            plt.tight_layout()
+
+            # Plot Wind Direction
+            # Wind direction
+            cardinals = {"N": 0,           
+                        "E": (np.pi / 2),
+                        "S": (np.pi),
+                        "W": (3 * np.pi / 2)}
+            # Plot
+            plt.figure(figsize=(10, 6))
+            plt.polar()      
+            plt.scatter(dir_test_radian, np.ones(len(dir_test_radian)) * 0.8, alpha=0.7, label = 'Observed Wind Direction')
+            plt.scatter(np.deg2rad(dir_pred), np.ones(len(dir_test_radian)) * 0.85, alpha=0.7, label = 'Predicted Wind Direction')
+
+            # Make it Pretty
+            plt.gca().set_theta_zero_location('N')
+            plt.gca().set_theta_direction(-1)
+            plt.title(f"{station} Wind Direction", pad = 50)
+            plt.gca().set_rlabel_position(0)
+            plt.ylim(0,1)
+            # Add cardinal direction labels
+            for label, angle in cardinals.items():
+                            plt.text(
+                                angle,
+                                1.2,
+                                label,
+                                ha="center",
+                                va="center",
+                                fontsize=12,
+                                fontweight="bold",
+                                clip_on=False)
+            # Legend
+            plt.legend(loc = 'upper right', bbox_to_anchor = (1.55, 1.18))
+            # Design
+            plt.tight_layout()
+
+            # Plot WS, WD, Seis Power
+            # AWS Variable and Wind direction
+
+            # Best frequency index for seismic power
+            var_best = np.argmax(var_importance)
+
+            if var_best < n_bands:
+
+                best_component = "Z"
+                best_index = var_best
+                best_var = X_all_test[:, var_best]
+
+            elif var_best < 2*n_bands:
+
+                best_component = "NS"
+                best_index = var_best - n_bands
+                best_var = X_all_test[:, var_best]
+
+            else:
+
+                best_component = "EW"
+                best_index = var_best - 2*n_bands
+                best_var = X_all_test[:, var_best]
+
+            # Best Centre frequencies
+            freq_best = band_centres[best_index]
+
+            # Create plot
+            plt.figure(figsize=(10,6))
+            ax = plt.subplot(projection='polar')
+            plt.polar()
+            # Colour bar
+            power_colours = best_var
+            cmap = matplotlib.cm.get_cmap('plasma')
+            new_cmap = matplotlib.colors.LinearSegmentedColormap.from_list('snipped_cmap', cmap(np.linspace(0, 0.90, 256)))
+            #cmap2 = matplotlib.cm.get_cmap('cool') # For error magnitude
+            # Plot measurements
+            obs = ax.scatter(dir_test_radian, y_var_test, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Observed {variable_name}', marker='x')
+            pred = ax.scatter(np.deg2rad(dir_pred), var_pred, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Predicted {variable_name}', marker='^')
+            # Plot error mag line between pred and obs point
+
+            # WS error
+            # Not useful yet, but could be used to colour the line between obs and pred points
+            #ws_error = np.abs(y_var_test - var_pred)
+            # Combined error magnitude. Cant just combine WS and WD so left out for now
+            #error_mag = np.sqrt(dir_fix**2 + ws_error**2)
+            #error_norm = matplotlib.colors.Normalize(vmin=error_mag.min(), vmax=error_mag.max())
+
+            for i in range(len(dir_test_radian)):
+                ax.plot([dir_test_radian[i], np.deg2rad(dir_pred[i])], [y_var_test[i], var_pred[i]], color='grey', alpha=1, linewidth=0.8)
+            # Make it pretty
+            ax.set_theta_zero_location('N')
+            ax.set_theta_direction(-1)
+            ax.set_ylabel(f'{variable_name}', labelpad=55, fontsize = 12)
+            ax.set_title(f"{station}: {variable_name} and Wind Direction", pad = 60, fontsize = 25)
+            ax.set_rlabel_position(0)
+            ax.tick_params(labelsize = 12)
+            rmax = ax.get_rmax()
+            # Add cardinal direction labels
+            for label, angle in cardinals.items():
+                            ax.text(
+                                angle,
+                                rmax * 1.3,
+                                label,
+                                ha="center",
+                                va="center",
+                                fontsize=15,
+                                fontweight="bold",
+                                clip_on=False)
+            # More pretty
+            plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
+            # Seismic Colour Bar
+            cbar = plt.colorbar(obs, ax=ax, pad=0.1)
+            cbar.set_label(f'Log Seismic Power\n{best_component}, {freq_best[0]:.1f} Hz', size = 12)
+            # Error Colour Bar
+            # Need to think of a good way to represent error well. Cant just combine WS and WD
+            #sm = matplotlib.cm.ScalarMappable(norm=error_norm, cmap=cmap2)
+            #sm.set_array([])   # required placeholder
+            #cbar2 = plt.colorbar(sm, ax=ax, pad=0.1)
+            #cbar2.set_label("Error Magnitude", fontsize=12)
+
+                                        
+            cbar.ax.tick_params(labelsize=12)
+            #cbar2.ax.tick_params(labelsize=12)
+            plt.tight_layout()
+
+        # Plot WS Residiuals
+        if plot_residuals == True:
+
+            fig, ax = plt.subplots(1, 3, figsize=(8, 8))
+            ax[0].scatter(var_pred, y_var_test - var_pred)
+            ax[0].axhline(0, color='red', linestyle='--')
+            ax[0].set_xlabel(f"Predicted {variable_name}")
+            ax[0].set_ylabel("Residual (Observed - Predicted)")
+            ax[0].set_title(f"Residual Plot for {station}, {variable_name}")
+            ax[1].scatter(sin_pred, y_sin_test - sin_pred)
+            ax[1].axhline(0, color='red', linestyle='--')
+            ax[1].set_xlabel("Predicted Wind Direction Sin")
+            ax[1].set_ylabel("Residual (Observed - Predicted)")
+            ax[1].set_title(f"Residual Plot for {station}, Wind Direction Sin")
+            ax[2].scatter(cos_pred, y_cos_test - cos_pred)
+            ax[2].axhline(0, color='red', linestyle='--')
+            ax[2].set_xlabel("Predicted Wind Direction Cos")
+            ax[2].set_ylabel("Residual (Observed - Predicted)")
+            ax[2].set_title(f"Residual Plot for {station}, Wind Direction Cos")
+            fig.tight_layout()
+
+        # Plot Observed WS and seis power
+        if plot_power_aws == True:
+
+            # LogSeismic Power vs Obs AWS  
+
+            # Best frequency index for power
+            var_best = np.argmax(var_importance)
+
+            if var_best < n_bands:
+
+                best_component = "Z"
+                best_index = var_best
+                best_var = X_all_test[:, var_best]
+
+                
+            elif var_best < 2*n_bands:
+
+                best_component = "NS"
+                best_index = var_best - n_bands
+                best_var = X_all_test[:, var_best]
+
+            
+            else:
+
+                best_component = "EW"
+                best_index = var_best - 2*n_bands
+                best_var = X_all_test[:, var_best]
+
+                
+            # Best Centre frequencies
+            freq = band_centres[best_index]
+
+            # Sort for plot
+            idx = np.argsort(best_var)
+            x_sort = best_var[idx]
+
+            # Polynomial 
+            # Reshape x values
+            poly_x = best_var.reshape(-1,1)
+            # Create Pipeline 
+            poly = make_pipeline(PolynomialFeatures(degree=poly_degree), LinearRegression()).fit(poly_x, y_var_test)
+            # Calculate R² 
+            poly_r2 = poly.score(poly_x, y_var_test)
+            # Predict
+            poly_pred = poly.predict(poly_x)[idx]
+            # Coefficients
+            linear_model = poly.named_steps['linearregression']
+            coefficients = linear_model.coef_
+            intercept = linear_model.intercept_
+            # Equation
+            if poly_degree == 1:
+                equation = f"y = {coefficients[1]:.2f}x + {intercept:2f}"
+            elif poly_degree == 2:
+                equation = f"y = {coefficients[2]:.2f}x$^{2}$ + {coefficients[1]:.2f}x + {intercept:.2f}"
+            else:
+                print('Calculation only for poly_degree = 1 or 2')
+                equation = 'Equation not calculated'
+
+            # Create plots
+            plt.figure(figsize=(10,10))
+            plt.scatter(best_var, y_var_test, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+
+            # Plot
+            plt.plot(x_sort, poly_pred, 'r--', linewidth = 4, label = f'{equation} \nR² = {poly_r2:.2f}')
+            plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz", fontsize = 25)
+            # Make pretty
+            plt.legend(fontsize = 20)
+            plt.xlabel("Log Seismic Power", fontsize = 20)
+            plt.ylabel(f"Observed {variable_name}", fontsize = 20)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
+            plt.tight_layout()
+
+        # Find best 10 frequency bands for each component     
+        top_ten = np.argsort(var_importance)[::-1][:10]
+
+        for index in top_ten:
+
+            if index < n_bands:
+                component = "Z"
+                freq_index = index
+
+            elif index < 2 * n_bands:
+                component = "NS"
+                freq_index = index - n_bands
+
+            else:
+                component = "EW"
+                freq_index = index - 2 * n_bands
+
+            frequency = band_centres[freq_index]
+
+            # Print them
+            print(f"{component}: {frequency[0]:.1f} Hz, importance = {var_importance[index]:.4f}")
+
+    return results
+
+def full_spectrum_EN_WS_WD(spectra,
+                                    fmin = 1,
+                                    fmax = 49,
+                                    f_band_width = 1,
+                                    step_size = 1,
+                                    n_repeats = 3,
+                                    min_WS = None,
+                                    poly_degree = 2,
+                                    plot_stat_results = True,
+                                    plot_results = True,
+                                    plot_residuals = True,
+                                    plot_power_aws = True,
+                                    variable_name = 'AWS Wind Speed (km/hr)'):
+    
+    """
+    Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
+    using a ElasticNet regression model. Combines all seismic components into one model.
+    Includes a y_test array of AWS and WD. 
+    Multi Output model.
+
+    Parameters:
+        spectra (list):
+            A list of dictionaries containing the frequency, power, and Wind Speed data 
+            for each seismic component (EW, NS, Z) for each station and time period.
+        fmin (int):
+            Minimum frequency value for calculating the power of each bandwidths.
+        fmax (int):
+            Maximum frequency value for calculating the power of each  bandwidths.
+        f_band_width (int):
+            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+        step_size (int):
+            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+        n_repeats (int):
+            Number of times to repeat the permutation importance calculation for each seismic component.
+        min_WS (int):
+            Minimum wind speed (km/hr) to be considered in analysis.
+        poly_degree (int):
+            Polynomial degree for the regression in plot_power_aws (Seis Power vs Obs WS)
+        plot_stat_results (bool):
+            Plots all the R² and rmse values against frequency bandwidth centres.
+        plot_results (bool):
+            Plots the predicted vs observed values for each seismic component.
+        plot_cv (bool):
+            Plot the cross validation results as boxplots       
+        plot_power_aws (bool):
+            Plot the relationship between seismic power and AWS values.
+        variable_name (str):
+            The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
+
+    Outputs:
+        results (list):
+            A list of dictionaries containing information about all the correlation results for each station.
+    """
+    
+    # Setup Result Lists
+    results = []
+
+    # Bands
+    # Create Bandwidths
+    bands = []
+    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+        f2 = f1 + f_band_width
+        band = (f1, f2)
+        bands.append(band)
+    # Num of Bands
+    n_bands = len(bands)
+    # Create Band Centers
+    band_centres = []
+    for f1, f2 in bands:
+        band_centre = [(f1 + f2)/2]
+        band_centres.append(band_centre)
+
+    # Loop through stations
+    for station_dict in spectra:
+
+        # Setup Variables
+        station = list(station_dict.keys())[0] 
+        EW_power = station_dict[station][0]['EW']
+        NS_power = station_dict[station][0]['NS']
+        Z_power = station_dict[station][0]['Z']
+        freq = station_dict[station][0]['freq']
+        aws_values = station_dict[station][0]['aws_values']
+        wind_direction = station_dict[station][0]['wind_direction']
+
+        # Angle wrap around problem
+        dir_radians = np.deg2rad(wind_direction)
+        dir_sin = np.sin(dir_radians)
+        dir_cos = np.cos(dir_radians)
+        
+        # Setup results
+        station_results = []
+        
+        # Setup powers
+        X_Z = np.zeros((len(aws_values), len(bands)))
+        X_NS = np.zeros((len(aws_values), len(bands)))
+        X_EW = np.zeros((len(aws_values), len(bands)))
+
+        # Apply bandwidths to data
+        for i, (f1,f2) in enumerate(bands):
+            band_width = (freq >= f1) & (freq < f2)
+
+            # Convert to log to better inspect power scales and apply bandwidth
+            # [:, band_width], select frequencies and slice unwanted freq data from the row
+            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+
+        # Stack all together to process all together as a larger dataset
+        X_all = np.column_stack([X_Z, X_NS, X_EW])
+        y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+       
+        # Should the wind speed threshold be applied before or after training the model?
+        # Apply minimum WS threshold
+        if min_WS is not None:
+            mask = y_all[:, 0] > min_WS
+            X_all = X_all[mask]
+            y_all = y_all[mask]
+            
+        # Train Model
+        X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
+
+        # Pipeline
+        # Scale, ElasticNet (Need to find optimal l1 still)
+        var_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=0.08, l1_ratio=0.5))])
+        sin_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=0.08, l1_ratio=0.5))])
+        cos_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=0.08, l1_ratio=0.5))])
+
+        # Cross Validation
+        cv = KFold(n_splits=5, shuffle=True, random_state=42)
+        var_scores = cross_val_score(var_model, X_all, y_all[:, 0], cv=cv, scoring='r2')
+        sin_scores = cross_val_score(sin_model, X_all, y_all[:, 1], cv=cv, scoring='r2')
+        cos_scores = cross_val_score(cos_model, X_all, y_all[:, 2], cv=cv, scoring='r2')
+
+        # Fit Model
+        var_model.fit(X_all_train, y_all_train[:,0])
+        sin_model.fit(X_all_train, y_all_train[:, 1])
+        cos_model.fit(X_all_train, y_all_train[:, 2])
+
+        # Predictions
+        var_pred = var_model.predict(X_all_test)
+        sin_pred = sin_model.predict(X_all_test)
+        cos_pred = cos_model.predict(X_all_test)
+
+        # Round WS Prediction to one decimal so it matches with AWS Measurement
+        var_pred = np.round(var_pred, decimals=1)
+
+        # Observed
+        y_var_test = y_all_test[:, 0]
+        y_sin_test = y_all_test[:, 1]
+        y_cos_test = y_all_test[:, 2]
+
+    
+        # Predicted direction
+        dir_pred_radian = np.arctan2(sin_pred, cos_pred)
+        dir_pred = np.rad2deg(dir_pred_radian)
+
+        # Round to nearest 10 degrees
+        dir_pred = np.round(dir_pred, decimals=-1)
+        
+        # Wrap back to 0-360 degrees
+        dir_pred = dir_pred % 360 
+
+        # Fix angles near end points
+        dir_test_radian = np.arctan2(y_sin_test, y_cos_test)
+        dir_test = np.rad2deg(dir_test_radian) % 360
+        dir_fix = np.abs((dir_pred - dir_test + 180) % 360 - 180)
+
+        # Mean direction
+        dir_mean = np.mean(dir_fix)
+
+        # rmse
+        var_rmse = np.sqrt(mean_squared_error(y_var_test, var_pred))
+        sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
+        cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
+        dir_rmse = np.sqrt(np.mean(dir_fix**2))
+
+        # R²
+        var_r2 = r2_score(y_var_test, var_pred)
+        sin_r2 = r2_score(y_sin_test, sin_pred)
+        cos_r2 = r2_score(y_cos_test, cos_pred)
+
+        # Freq Importance
+        var_importance = permutation_importance(var_model, X_all_test, y_var_test, n_repeats=n_repeats, scoring='r2').importances_mean
+        sin_importance = permutation_importance(sin_model, X_all_test, y_sin_test, n_repeats=n_repeats, scoring='r2').importances_mean
+        cos_importance = permutation_importance(cos_model, X_all_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
+        #dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
+
+        # Coeffs? see full_elasticnet?
+
+        # Store results
+        station_results.append({
+            'fmin': fmin,
+            'fmax': fmax,
+            'var_r2': var_r2,
+            'sin_r2': sin_r2,
+            'cos_r2': cos_r2,
+            'var_rmse': var_rmse,
+            'sin_rmse': sin_rmse,
+            'cos_rmse': cos_rmse,
+            'y_var_test': y_var_test,
+            'y_sin_test': y_sin_test,
+            'y_cos_test': y_cos_test,
+            'var_pred': var_pred,
+            'sin_pred': sin_pred,
+            'cos_pred': cos_pred,
+            'var_cv_r2': var_scores.mean(),
+            'sin_cv_r2': sin_scores.mean(),
+            'cos_cv_r2': cos_scores.mean(),
+            'var_cv_std': var_scores.std(),
+            'sin_cv_std': sin_scores.std(),
+            'cos_cv_std': cos_scores.std(),
+            'dir_pred': dir_pred,
+            'dir_test': dir_test,
+            'dir_mean_error': dir_mean,
+            'dir_rmse': dir_rmse}) 
+        
+        # Print best result
+        # R²
+        print(f"{variable_name} R²: {var_r2:.4f}")
+        print(f"Sin R²: {sin_r2:.4f}")
+        print(f"Cos R²: {cos_r2:.4f}")
+
+        # rmse
+        print(f"{variable_name} rmse: {var_rmse:.4f}")
+        print(f"Sin rmse: {sin_rmse:.4f}")
+        print(f"Cos rmse: {cos_rmse:.4f}")
+
+        # Cross Validation R²
+        print(f"{variable_name} cv R²: {var_scores.mean():.4f} +/- {var_scores.std():.4f}")
+        print(f"Sin cv R²: {sin_scores.mean():.4f} +/- {sin_scores.std():.4f}")
+        print(f"Cos cv R²: {cos_scores.mean():.4f} +/- {cos_scores.std():.4f}")
+        results.append(station_results)
+
+        # WD
+        print(f"Wind direction Mean Error: {dir_mean:.2f}°")
+        print(f"Wind direction RMSE: {dir_rmse:.2f}°")
+
+        # Plot all average R² and rmse results against centre frequency
+        if plot_stat_results == True:
+            
+            # AWS Variable
+            Z_var_importance = var_importance[:n_bands]
+            NS_var_importance = var_importance[n_bands:2*n_bands]
+            EW_var_importance = var_importance[2*n_bands:3*n_bands]
+            # AWS Direction
+            #Z_dir_importance = dir_importance[:n_bands]
+            #NS_dir_importance = dir_importance[n_bands:2*n_bands]
+            #EW_dir_importance = dir_importance[2*n_bands:3*n_bands]
+
+            # Plot
+            fig, ax = plt.subplots(1, 3, figsize=(8, 6))
+            ax[0].plot(band_centres, Z_var_importance)
+            ax[0].set_title(f'Z {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[0].set_ylim(top=1)
+            ax[1].plot(band_centres, NS_var_importance)
+            ax[1].set_title(f'NS {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[1].set_ylim(top=1)
+            ax[2].plot(band_centres, EW_var_importance)
+            ax[2].set_title(f'EW {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
+            ax[2].set_ylim(top=1)
+            #ax[1, 0].plot(band_centres, Z_dir_importance)
+            #ax[1, 0].set_title(f'Combined Z Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 0].set_ylim(top=1)
+            #ax[1, 1].plot(band_centres, NS_dir_importance)
+            #ax[1, 1].set_title(f'Combined NS Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 1].set_ylim(top=1)
+            #ax[1, 2].plot(band_centres, EW_dir_importance)
+            #ax[1, 2].set_title(f'Combined EW Wind Direction \n Permutation Importance \n Acrosss Freq Spectrum')
+            #ax[1, 2].set_ylim(top=1)
+
+            fig.suptitle(f'{station}:')
+            fig.supxlabel('Frequency (Hz)')
+            fig.supylabel('RF Permutation Importance')
+            fig.tight_layout()
+
+        # Plot key results
+        if plot_results == True:
+
+            # Plot obs vs pred WS
+            # AWS Variable
+            # Plot
+            plt.figure(figsize=(10, 10))
+            plt.scatter(y_var_test, var_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+
+            # y = x line
+            plt.plot([y_var_test.min(), y_var_test.max()],
+                    [y_var_test.min(), y_var_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            plt.xlabel(f"Observed {variable_name}", fontsize = 20)
+            plt.ylabel(f"Predicted {variable_name}", fontsize = 20)
+            plt.title(f"{station} {variable_name}", fontsize = 25)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
+            plt.legend(fontsize = 20, loc ='upper left')
+            plt.tight_layout()
+
+            # Plot obs vs pred Wind Direction
+            # sin2theta and cos2theta
+            fig, ax = plt.subplots(2,1, figsize=(10, 10))
+            ax[0].scatter(y_sin_test, sin_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            ax[1].scatter(y_cos_test, cos_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            
+            # y = x line
+            ax[0].plot([y_sin_test.min(), y_sin_test.max()],
+                    [y_sin_test.min(), y_sin_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            ax[1].plot([y_cos_test.min(), y_cos_test.max()],
+                    [y_cos_test.min(), y_cos_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            ax[0].set_xlabel("Observed Wind Direction Sin2Theta", fontsize = 20)
+            ax[0].set_ylabel("Predicted Wind Direction Sin2Theta", fontsize = 20)
+            ax[0].set_title(f"{station} Wind Direction Sin2Theta", fontsize = 25)
+            ax[1].set_xlabel("Observed Wind Direction Cos2Theta", fontsize = 20)
+            ax[1].set_ylabel("Predicted Wind Direction Cos2Theta", fontsize = 20)
+            ax[1].set_title(f"{station} Wind Direction Cos2Theta", fontsize = 25)
+            ax[0].tick_params(axis='both', which='major', labelsize=20)
+            ax[1].tick_params(axis='both', which='major', labelsize=20)
+            fig.tight_layout()
+
+            # Sin2 and Cos2 Converted back to angle
+            plt.figure(figsize=(10, 10))
+            plt.scatter(dir_test, dir_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+            
+            # y = x line
+            plt.plot([dir_test.min(), dir_test.max()],
+                    [dir_test.min(), dir_test.max()],
+                    'r--', linewidth = 4, label = 'y = x')
+            # Make it pretty
+            plt.xlabel("Observed Wind Direction (°)", fontsize = 20)
+            plt.ylabel("Predicted Wind Direction (°)", fontsize = 20)
+            plt.title(f"{station} Wind Direction (°)", fontsize = 25)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
+            plt.legend(fontsize = 20, loc ='upper left')
+            plt.tight_layout()
+
+            # Plot Wind Direction
+            # Wind direction
+            cardinals = {"N": 0,           
+                        "E": (np.pi / 2),
+                        "S": (np.pi),
+                        "W": (3 * np.pi / 2)}
+            # Plot
+            plt.figure(figsize=(10, 6))
+            plt.polar()      
+            plt.scatter(dir_test_radian, np.ones(len(dir_test_radian)) * 0.8, alpha=0.7, label = 'Observed Wind Direction')
+            plt.scatter(np.deg2rad(dir_pred), np.ones(len(dir_test_radian)) * 0.85, alpha=0.7, label = 'Predicted Wind Direction')
+
+            # Make it Pretty
+            plt.gca().set_theta_zero_location('N')
+            plt.gca().set_theta_direction(-1)
+            plt.title(f"{station} Wind Direction", pad = 50)
+            plt.gca().set_rlabel_position(0)
+            plt.ylim(0,1)
+            # Add cardinal direction labels
+            for label, angle in cardinals.items():
+                            plt.text(
+                                angle,
+                                1.2,
+                                label,
+                                ha="center",
+                                va="center",
+                                fontsize=12,
+                                fontweight="bold",
+                                clip_on=False)
+            # Legend
+            plt.legend(loc = 'upper right', bbox_to_anchor = (1.55, 1.18))
+            # Design
+            plt.tight_layout()
+
+            # Plot WS, WD, Seis Power
+            # AWS Variable and Wind direction
+
+            # Best frequency index for seismic power
+            var_best = np.argmax(var_importance)
+
+            if var_best < n_bands:
+
+                best_component = "Z"
+                best_index = var_best
+                best_var = X_all_test[:, var_best]
+
+            elif var_best < 2*n_bands:
+
+                best_component = "NS"
+                best_index = var_best - n_bands
+                best_var = X_all_test[:, var_best]
+
+            else:
+
+                best_component = "EW"
+                best_index = var_best - 2*n_bands
+                best_var = X_all_test[:, var_best]
+
+            # Best Centre frequencies
+            freq_best = band_centres[best_index]
+
+            # Create plot
+            plt.figure(figsize=(10,6))
+            ax = plt.subplot(projection='polar')
+            plt.polar()
+            # Colour bar
+            power_colours = best_var
+            cmap = matplotlib.cm.get_cmap('plasma')
+            new_cmap = matplotlib.colors.LinearSegmentedColormap.from_list('snipped_cmap', cmap(np.linspace(0, 0.90, 256)))
+            #cmap2 = matplotlib.cm.get_cmap('cool') # For error magnitude
+            # Plot measurements
+            obs = ax.scatter(dir_test_radian, y_var_test, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Observed {variable_name}', marker='x')
+            pred = ax.scatter(np.deg2rad(dir_pred), var_pred, alpha=0.7, c=power_colours, cmap=new_cmap, s = 60, label = f'Predicted {variable_name}', marker='^')
+            # Plot error mag line between pred and obs point
+
+            # WS error
+            # Not useful yet, but could be used to colour the line between obs and pred points
+            #ws_error = np.abs(y_var_test - var_pred)
+            # Combined error magnitude. Cant just combine WS and WD so left out for now
+            #error_mag = np.sqrt(dir_fix**2 + ws_error**2)
+            #error_norm = matplotlib.colors.Normalize(vmin=error_mag.min(), vmax=error_mag.max())
+
+            for i in range(len(dir_test_radian)):
+                ax.plot([dir_test_radian[i], np.deg2rad(dir_pred[i])], [y_var_test[i], var_pred[i]], color='grey', alpha=1, linewidth=0.8)
+            # Make it pretty
+            ax.set_theta_zero_location('N')
+            ax.set_theta_direction(-1)
+            ax.set_ylabel(f'{variable_name}', labelpad=55, fontsize = 12)
+            ax.set_title(f"{station}: {variable_name} and Wind Direction", pad = 60, fontsize = 25)
+            ax.set_rlabel_position(0)
+            ax.tick_params(labelsize = 12)
+            rmax = ax.get_rmax()
+            # Add cardinal direction labels
+            for label, angle in cardinals.items():
+                            ax.text(
+                                angle,
+                                rmax * 1.3,
+                                label,
+                                ha="center",
+                                va="center",
+                                fontsize=15,
+                                fontweight="bold",
+                                clip_on=False)
+            # More pretty
+            plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
+            # Seismic Colour Bar
+            cbar = plt.colorbar(obs, ax=ax, pad=0.1)
+            cbar.set_label(f'Log Seismic Power\n{best_component}, {freq_best[0]:.1f} Hz', size = 12)
+            # Error Colour Bar
+            # Need to think of a good way to represent error well. Cant just combine WS and WD
+            #sm = matplotlib.cm.ScalarMappable(norm=error_norm, cmap=cmap2)
+            #sm.set_array([])   # required placeholder
+            #cbar2 = plt.colorbar(sm, ax=ax, pad=0.1)
+            #cbar2.set_label("Error Magnitude", fontsize=12)
+
+                                        
+            cbar.ax.tick_params(labelsize=12)
+            #cbar2.ax.tick_params(labelsize=12)
+            plt.tight_layout()
+
+        # Plot WS Residiuals
+        if plot_residuals == True:
+
+            fig, ax = plt.subplots(1, 3, figsize=(8, 8))
+            ax[0].scatter(var_pred, y_var_test - var_pred)
+            ax[0].axhline(0, color='red', linestyle='--')
+            ax[0].set_xlabel(f"Predicted {variable_name}")
+            ax[0].set_ylabel("Residual (Observed - Predicted)")
+            ax[0].set_title(f"Residual Plot for {station}, {variable_name}")
+            ax[1].scatter(sin_pred, y_sin_test - sin_pred)
+            ax[1].axhline(0, color='red', linestyle='--')
+            ax[1].set_xlabel("Predicted Wind Direction Sin")
+            ax[1].set_ylabel("Residual (Observed - Predicted)")
+            ax[1].set_title(f"Residual Plot for {station}, Wind Direction Sin")
+            ax[2].scatter(cos_pred, y_cos_test - cos_pred)
+            ax[2].axhline(0, color='red', linestyle='--')
+            ax[2].set_xlabel("Predicted Wind Direction Cos")
+            ax[2].set_ylabel("Residual (Observed - Predicted)")
+            ax[2].set_title(f"Residual Plot for {station}, Wind Direction Cos")
+            fig.tight_layout()
+
+        # Plot Observed WS and seis power
+        if plot_power_aws == True:
+
+            # LogSeismic Power vs Obs AWS  
+
+            # Best frequency index for power
+            var_best = np.argmax(var_importance)
+
+            if var_best < n_bands:
+
+                best_component = "Z"
+                best_index = var_best
+                best_var = X_all_test[:, var_best]
+
+                
+            elif var_best < 2*n_bands:
+
+                best_component = "NS"
+                best_index = var_best - n_bands
+                best_var = X_all_test[:, var_best]
+
+            
+            else:
+
+                best_component = "EW"
+                best_index = var_best - 2*n_bands
+                best_var = X_all_test[:, var_best]
+
+                
+            # Best Centre frequencies
+            freq = band_centres[best_index]
+
+            # Sort for plot
+            idx = np.argsort(best_var)
+            x_sort = best_var[idx]
+
+            # Polynomial 
+            # Reshape x values
+            poly_x = best_var.reshape(-1,1)
+            # Create Pipeline 
+            poly = make_pipeline(PolynomialFeatures(degree=poly_degree), LinearRegression()).fit(poly_x, y_var_test)
+            # Calculate R² 
+            poly_r2 = poly.score(poly_x, y_var_test)
+            # Predict
+            poly_pred = poly.predict(poly_x)[idx]
+            # Coefficients
+            linear_model = poly.named_steps['linearregression']
+            coefficients = linear_model.coef_
+            intercept = linear_model.intercept_
+            # Equation
+            if poly_degree == 1:
+                equation = f"y = {coefficients[1]:.2f}x + {intercept:2f}"
+            elif poly_degree == 2:
+                equation = f"y = {coefficients[2]:.2f}x$^{2}$ + {coefficients[1]:.2f}x + {intercept:.2f}"
+            else:
+                print('Calculation only for poly_degree = 1 or 2')
+                equation = 'Equation not calculated'
+
+            # Create plots
+            plt.figure(figsize=(10,10))
+            plt.scatter(best_var, y_var_test, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
+
+            # Plot
+            plt.plot(x_sort, poly_pred, 'r--', linewidth = 4, label = f'{equation} \nR² = {poly_r2:.2f}')
+            plt.title(f"{station}: {best_component}, {freq[0]:.1f} Hz", fontsize = 25)
+            # Make pretty
+            plt.legend(fontsize = 20)
+            plt.xlabel("Log Seismic Power", fontsize = 20)
+            plt.ylabel(f"Observed {variable_name}", fontsize = 20)
+            plt.xticks(fontsize = 20)
+            plt.yticks(fontsize = 20)
+            plt.tight_layout()
+
+        # Find best 10 frequency bands for each component     
+        top_ten = np.argsort(var_importance)[::-1][:10]
+
+        for index in top_ten:
+
+            if index < n_bands:
+                component = "Z"
+                freq_index = index
+
+            elif index < 2 * n_bands:
+                component = "NS"
+                freq_index = index - n_bands
+
+            else:
+                component = "EW"
+                freq_index = index - 2 * n_bands
+
+            frequency = band_centres[freq_index]
+
+            # Print them
+            print(f"{component}: {frequency[0]:.1f} Hz, importance = {var_importance[index]:.4f}")
+
+    return results
+
+def full_spectrum_ridge_WS_WD(spectra,
+                                fmin = 1,
+                                fmax = 49,
+                                f_band_width = 1,
+                                step_size = 1,
+                                n_repeats = 3,
+                                min_WS = None,
+                                poly_degree = 2,
+                                plot_stat_results = True,
+                                plot_results = True,
+                                plot_residuals = True,
+                                plot_power_aws = True,
+                                variable_name = 'AWS Wind Speed (km/hr)'):
+
+    """
+    Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
+    using a Ridge regression model. Combines all seismic components into one model.
+    Includes a y_test array of AWS and WD. 
+    Multi Output model.
+
+    Parameters:
+        spectra (list):
+            A list of dictionaries containing the frequency, power, and Wind Speed data 
+            for each seismic component (EW, NS, Z) for each station and time period.
+        fmin (int):
+            Minimum frequency value for calculating the power of each bandwidths.
+        fmax (int):
+            Maximum frequency value for calculating the power of each  bandwidths.
+        f_band_width (int):
+            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+        step_size (int):
+            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+        n_repeats (int):
+            Number of times to repeat the permutation importance calculation for each seismic component.
+        min_WS (int):
+            Minimum wind speed (km/hr) to be considered in analysis.
+        poly_degree (int):
+            Polynomial degree for the regression in plot_power_aws (Seis Power vs Obs WS)
+        plot_stat_results (bool):
+            Plots all the R² and rmse values against frequency bandwidth centres.
+        plot_results (bool):
+            Plots the predicted vs observed values for each seismic component.
+        plot_cv (bool):
+            Plot the cross validation results as boxplots       
+        plot_power_aws (bool):
+            Plot the relationship between seismic power and AWS values.
+        variable_name (str):
+            The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
+
+    Outputs:
+        results (list):
+            A list of dictionaries containing information about all the correlation results for each station.
+    """
+    
+    # Setup Result Lists
+    results = []
+
+    # Bands
+    # Create Bandwidths
+    bands = []
+    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+        f2 = f1 + f_band_width
+        band = (f1, f2)
+        bands.append(band)
+    # Num of Bands
+    n_bands = len(bands)
+    # Create Band Centers
+    band_centres = []
+    for f1, f2 in bands:
+        band_centre = [(f1 + f2)/2]
+        band_centres.append(band_centre)
+
+    # Loop through stations
+    for station_dict in spectra:
+
+        # Setup Variables
+        station = list(station_dict.keys())[0] 
+        EW_power = station_dict[station][0]['EW']
+        NS_power = station_dict[station][0]['NS']
+        Z_power = station_dict[station][0]['Z']
+        freq = station_dict[station][0]['freq']
+        aws_values = station_dict[station][0]['aws_values']
+        wind_direction = station_dict[station][0]['wind_direction']
+
+        # Angle wrap around problem
+        dir_radians = np.deg2rad(wind_direction)
+        dir_sin = np.sin(dir_radians)
+        dir_cos = np.cos(dir_radians)
+        
+        # Setup results
+        station_results = []
+        
+        # Setup powers
+        X_Z = np.zeros((len(aws_values), len(bands)))
+        X_NS = np.zeros((len(aws_values), len(bands)))
+        X_EW = np.zeros((len(aws_values), len(bands)))
+
+        # Apply bandwidths to data
+        for i, (f1,f2) in enumerate(bands):
+            band_width = (freq >= f1) & (freq < f2)
+
+            # Convert to log to better inspect power scales and apply bandwidth
+            # [:, band_width], select frequencies and slice unwanted freq data from the row
+            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+
+        # Stack all together to process all together as a larger dataset
+        X_all = np.column_stack([X_Z, X_NS, X_EW])
+        y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+       
+        # Should the wind speed threshold be applied before or after training the model?
+        # Apply minimum WS threshold
+        if min_WS is not None:
+            mask = y_all[:, 0] > min_WS
+            X_all = X_all[mask]
+            y_all = y_all[mask]
+            
+        # Train Model
+        X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
+
+        # Pipeline
+        # Scale, Ridge # need to optimise alpha
+        var_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=0.08))])
+        sin_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=0.08))])
+        cos_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=0.08))])
+
+        # Cross Validation
+        cv = KFold(n_splits=5, shuffle=True, random_state=42)
+        var_scores = cross_val_score(var_model, X_all, y_all[:, 0], cv=cv, scoring='r2')
+        sin_scores = cross_val_score(sin_model, X_all, y_all[:, 1], cv=cv, scoring='r2')
+        cos_scores = cross_val_score(cos_model, X_all, y_all[:, 2], cv=cv, scoring='r2')
+
+        # Fit Model
+        var_model.fit(X_all_train, y_all_train[:,0])
+        sin_model.fit(X_all_train, y_all_train[:, 1])
+        cos_model.fit(X_all_train, y_all_train[:, 2])
+
+        # Predictions
+        var_pred = var_model.predict(X_all_test)
+        sin_pred = sin_model.predict(X_all_test)
+        cos_pred = cos_model.predict(X_all_test)
+
+        # Round WS Prediction to one decimal so it matches with AWS Measurement
+        var_pred = np.round(var_pred, decimals=1)
+
+        # Observed
+        y_var_test = y_all_test[:, 0]
+        y_sin_test = y_all_test[:, 1]
+        y_cos_test = y_all_test[:, 2]
+
+    
+        # Predicted direction
+        dir_pred_radian = np.arctan2(sin_pred, cos_pred)
+        dir_pred = np.rad2deg(dir_pred_radian)
+
+        # Round to nearest 10 degrees
+        dir_pred = np.round(dir_pred, decimals=-1)
+        
+        # Wrap back to 0-360 degrees
+        dir_pred = dir_pred % 360 
+
+        # Fix angles near end points
+        dir_test_radian = np.arctan2(y_sin_test, y_cos_test)
+        dir_test = np.rad2deg(dir_test_radian) % 360
+        dir_fix = np.abs((dir_pred - dir_test + 180) % 360 - 180)
+
+        # Mean direction
+        dir_mean = np.mean(dir_fix)
+
+        # rmse
+        var_rmse = np.sqrt(mean_squared_error(y_var_test, var_pred))
+        sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
+        cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
+        dir_rmse = np.sqrt(np.mean(dir_fix**2))
+
+        # R²
+        var_r2 = r2_score(y_var_test, var_pred)
+        sin_r2 = r2_score(y_sin_test, sin_pred)
+        cos_r2 = r2_score(y_cos_test, cos_pred)
+
+        # Freq Importance
+        var_importance = permutation_importance(var_model, X_all_test, y_var_test, n_repeats=n_repeats, scoring='r2').importances_mean
+        sin_importance = permutation_importance(sin_model, X_all_test, y_sin_test, n_repeats=n_repeats, scoring='r2').importances_mean
+        cos_importance = permutation_importance(cos_model, X_all_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
+        #dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
+
+        # Coeffs? see full_ridge?
 
         # Store results
         station_results.append({

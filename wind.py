@@ -25,6 +25,7 @@ from sklearn.svm import SVR
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.inspection import permutation_importance
+from sklearn.linear_model import RidgeCV
 import matplotlib
 
 ###################################################################
@@ -7774,3 +7775,108 @@ def full_spectrum_cv_compare(spectra,
         results.append(station_results)
 
     return results
+
+def optimise_ridge(spectra,
+                    fmin = 1,
+                    fmax = 49,
+                    f_band_width = 1,
+                    step_size = 1,
+                    n_splits = 5,
+                    min_WS = None):
+    
+    # Setup Result Lists
+    results = []
+
+    # Bands
+    # Create Bandwidths
+    bands = []
+    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+        f2 = f1 + f_band_width
+        band = (f1, f2)
+        bands.append(band)
+    # Num of Bands
+    n_bands = len(bands)
+    # Create Band Centers
+    band_centres = []
+    for f1, f2 in bands:
+        band_centre = [(f1 + f2)/2]
+        band_centres.append(band_centre)
+
+    # Loop through stations
+    for station_dict in spectra:
+
+        # Setup Variables
+        station = list(station_dict.keys())[0] 
+        EW_power = station_dict[station][0]['EW']
+        NS_power = station_dict[station][0]['NS']
+        Z_power = station_dict[station][0]['Z']
+        freq = station_dict[station][0]['freq']
+        aws_values = station_dict[station][0]['aws_values']
+        wind_direction = station_dict[station][0]['wind_direction']
+
+        # Angle wrap around problem
+        dir_radians = np.deg2rad(wind_direction)
+        dir_sin = np.sin(dir_radians)
+        dir_cos = np.cos(dir_radians)
+        
+        # Setup results
+        station_results = []
+        
+        # Setup powers
+        X_Z = np.zeros((len(aws_values), len(bands)))
+        X_NS = np.zeros((len(aws_values), len(bands)))
+        X_EW = np.zeros((len(aws_values), len(bands)))
+
+        # Apply bandwidths to data
+        for i, (f1,f2) in enumerate(bands):
+            band_width = (freq >= f1) & (freq < f2)
+
+            # Convert to log to better inspect power scales and apply bandwidth
+            # [:, band_width], select frequencies and slice unwanted freq data from the row
+            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+
+        # Stack all together to process all together as a larger dataset
+        X_all = np.column_stack([X_Z, X_NS, X_EW])
+        y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+
+
+        # Should the wind speed threshold be applied before or after training the model?
+        # Apply minimum WS threshold
+        if min_WS is not None:
+            mask = y_all[:, 0] > min_WS
+            X_all = X_all[mask]
+            y_all = y_all[mask]
+            
+        # Train Model
+        X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
+
+        # Find best alpha
+        
+        # setup alpha list
+        alphas = np.logspace(-4, 4, 100)
+
+
+        cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+
+        # Ridge
+        # Pipeline
+        # Scale, RidgeCV 
+        var_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
+        sin_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
+        cos_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
+
+        var_ridge.fit(X_all_train, y_all_train[:, 0])
+        sin_ridge.fit(X_all_train, y_all_train[:, 1])
+        cos_ridge.fit(X_all_train, y_all_train[:, 2])
+
+        print("WS alpha:", var_ridge.named_steps['ridge'].alpha_,
+              "CV R²:", var_ridge.named_steps['ridge'].best_score_)
+        print("--------------------------------------------------")
+        print("Sin2 alpha:", sin_ridge.named_steps['ridge'].alpha_,
+              "CV R²:", sin_ridge.named_steps['ridge'].best_score_)
+        print("--------------------------------------------------")
+        print("Cos2 alpha:", cos_ridge.named_steps['ridge'].alpha_,
+              "CV R²:", cos_ridge.named_steps['ridge'].best_score_)

@@ -8236,11 +8236,11 @@ def optimise_RF(spectra,
 
         # Find best paramters
         # setup parameter lists
-        n_estimators = [50, 100, 200]
+        n_estimators = [50, 100, 150, 200]
         depths = [5, 10, 15, None]
         min_samp_split = [2, 5, 10]
         min_samp_leaf = [1, 3, 5]
-        max_feat = [0.5, 0.75, 1.0]
+        max_feat = [0.25, 0.5, 0.75, 1.0]
 
         best_var_r2 = -np.inf
         if WS_only == False:

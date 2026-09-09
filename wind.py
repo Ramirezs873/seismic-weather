@@ -8159,29 +8159,33 @@ def full_spectrum_ridge_WS_WD(spectra,
     return results
 
 def full_spectrum_cv_compare(spectra,
-                            fmin = 1,
+                            fmin = 3,
                             fmax = 49,
                             f_band_width = 1,
                             step_size = 1,
                             n_splits = 5,
-                            min_WS = None,
+                            min_WS = 14,
                             n_estimators=100, 
                             max_depth=15,
                             min_samples_split=2,
-                            min_samples_leaf=1,
-                            max_features=0.5,
-                            C=2154.43, 
-                            gamma = 0.0001, 
+                            min_samples_leaf=3,
+                            max_features=0.25,
+                            C= 129.15, 
+                            gamma = 0.006, 
                             epsilon=0.05,
                             alpha_EN=0.08, 
-                            l1_ratio=1, 
-                            alpha_Ridge = 5.86):
+                            l1_ratio=0.86, 
+                            alpha_Ridge = 10.24):
     """
     Using multiple seismic frequency band widths as model features, 
     this function compares the cross validation scores from 
     Random Forest, SVR, ElasticNet, and Ridge.
     Default parameter values are chosen based on the optimise functions
     outputs, for best wind speed cross validation, in this file.
+    These parameters were calculated using processed CWA86 data from
+    Dec 25th-31st, 2022, and the corresponding AWS data from CASY Skiway.
+    The inputs considered a minimum wind speed threshold of 14 m/s
+    and only looked at seismic frequencies from 3 Hz to 49 Hz.
 
     Parameters:
         spectra (list):
@@ -8209,15 +8213,15 @@ def full_spectrum_cv_compare(spectra,
         min_samples_split
             Default = 2
         min_samples_leaf:
-            Default = 1
+            Default = 3
         max_features:
-            Default = 0.5
+            Default = 0.25
     
     SVR Parameters:
         C:
-            Default = 2154.43
+            Default = 129.15
         gamma:
-            Default = 0.0001
+            Default = 0.006
         epsilon:
             Default = 0.05
     
@@ -8225,11 +8229,11 @@ def full_spectrum_cv_compare(spectra,
         alpha_EN:
             'alpha', Default = 0.08
         l1_ratio:
-            Default = 1 (Only Lasso)
+            Default = 0.86 (More Lasso than Ridge)
     
     Ridge Parameters:
         alpha_Ridge:
-            'alpha', Default = 5.86
+            'alpha', Default = 10.24
 
     Returns:
         Results (dict):

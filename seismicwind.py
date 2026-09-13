@@ -148,8 +148,10 @@ class Seismic:
             f"{tr.stats.location}"
             )
             wave_dict[station].append(tr) 
-    
-        return wave_dict 
+
+        self.st = wave_dict
+
+        return self 
 
 
     # Preprocess data
@@ -159,16 +161,209 @@ class Seismic:
             self.seismic = seismic
 
         # Trim
-        def trim(self):
-            pass
+        def trim(self,
+                 t_start=None, 
+                 duration=None,
+                 save_mseed=False,
+                 file_name='default_trim'):
+
+            """
+            Select a specific time window from seismic waveform data stored in a dictionary without altering the original.
+        
+            Parameters:
+                wave_dict (dict):
+                    Dictionary containing seismic waveform data.
+                t_start (UTCDateTime):
+                    Start time for the time window.
+                duration (float):
+                    Duration of the time window in seconds.
+                save_mseed (bool):
+                    True/False. True to save as mseed file.
+                file_name (str):
+                    Filename to save the data as.
+
+            Returns:
+                new_dict (dict):
+                    Dictionary containing selected seismic waveform data.
+            """
+        
+            # Path 
+            base_path = Path(self.seismic.config["seismic_data_path"]) if self.seismic.config else Path(".")
+            base_path.mkdir(parents=True, exist_ok=True)
+            file_path = (base_path / file_name).with_suffix(".mseed")
+
+            # Read file if it exists
+            if file_path.exists():
+                print(f"Reading existing file: {file_path}")
+                stream = read(str(file_path))
+                new_dict = defaultdict(list)
+                for tr in stream:
+                    new_dict[tr.stats.station].append(tr)
+
+                # Rewrite self.st
+                self.seismic.st = new_dict
+
+                return self.seismic
+            
+            else:
+                # Establish timespan
+                t_end = t_start + duration
+                streams = []
+
+                # Wave_dict
+                wave_dict = self.seismic.st
+
+                # Trim to desired timespan and write to a direction
+                new_dict = defaultdict(list)
+                for station_name in wave_dict:
+                    st = Stream(wave_dict[station_name]).copy() # Copy to avoid overwriting data
+                    st.trim(starttime=t_start, endtime=t_end, pad=False)
+                    streams.append(st)
+                    new_dict[station_name].extend(st.traces)
+
+                # Save as mseed file
+                if save_mseed == True:
+                    merged_stream = streams[0].copy() # Copy to avoid overwriting data
+                    for st in streams[1:]:
+                        merged_stream += st
+                    merged_stream.merge()
+
+                    merged_stream.write(f'{str(file_path)}', format="MSEED")
+                    print(f'Saved as {file_path}')
+
+                # Rewrite self.st
+                self.seismic.st = new_dict
+        
+            return self.seismic
 
         # Demean
-        def demean(self):
-            pass
+        def demean(self,
+                   save_mseed = False,
+                   file_name = 'default_demean'):
+
+            """
+            Demean seismic waveform data stored in a dictionary without altering the original.
+        
+            Parameters:
+            save_mseed (bool):
+                True/False. True to save as mseed file.
+            file_name (str):
+                Title of saved mseed file.
+            Returns:
+
+            new_dict (dict):
+                Dictionary containing demeaned seismic waveform data.
+            """
+
+            # Path 
+            base_path = Path(self.seismic.config["seismic_data_path"]) if self.seismic.config else Path(".")
+            base_path.mkdir(parents=True, exist_ok=True)
+            file_path = (base_path / file_name).with_suffix(".mseed")
+
+            # Read file if it exists
+            if file_path.exists():
+                print(f"Reading existing file: {file_path}")
+                stream = read(str(file_path))
+                new_dict = defaultdict(list)
+                for tr in stream:
+                    new_dict[tr.stats.station].append(tr)
+
+                # Rewrite self.st
+                self.seismic.st = new_dict
+
+            else:
+                # Wave_dict
+                wave_dict = self.seismic.st
+
+                # Demean and detrend the data and write to a dictionary
+                new_dict = defaultdict(list)
+                streams = []
+        
+                for station_name, traces in wave_dict.items():  
+                    st = Stream(traces).copy() # Copy to avoid overwriting data
+                    st.detrend("demean")
+                    streams.append(st)
+                    new_dict[station_name].extend(st.traces)
+                    
+                # Save as mseed file
+                if save_mseed == True:
+                    merged_stream = streams[0].copy() # Copy to avoid overwriting data
+                    for st in streams[1:]:
+                        merged_stream += st
+                    merged_stream.merge()
+        
+                    merged_stream.write(f'{str(file_path)}', format="MSEED")
+                    print(f'Saved as {file_path}')
+
+                # Rewrite self.st
+                self.seismic.st = new_dict
+
+            return self.seismic
+        
 
         # Detrend
-        def detrend(self):
-            pass
+        def detrend(self,
+                   save_mseed = False,
+                   file_name = 'default_detrended'):
+
+            """
+            Detrended seismic waveform data stored in a dictionary without altering the original.
+        
+            Parameters:
+            save_mseed (bool):
+                True/False. True to save as mseed file.
+            file_name (str):
+                Title of saved mseed file.
+            Returns:
+
+            new_dict (dict):
+                Dictionary containing detrended seismic waveform data.
+            """
+
+            # Path 
+            base_path = Path(self.seismic.config["seismic_data_path"]) if self.seismic.config else Path(".")
+            base_path.mkdir(parents=True, exist_ok=True)
+            file_path = (base_path / file_name).with_suffix(".mseed")
+
+            # Read file if it exists
+            if file_path.exists():
+                print(f"Reading existing file: {file_path}")
+                stream = read(str(file_path))
+                new_dict = defaultdict(list)
+                for tr in stream:
+                    new_dict[tr.stats.station].append(tr)
+
+                # Rewrite self.st
+                self.seismic.st = new_dict
+
+            else:
+                # Wave_dict
+                wave_dict = self.seismic.st
+
+                # Demean and detrend the data and write to a dictionary
+                new_dict = defaultdict(list)
+                streams = []
+        
+                for station_name, traces in wave_dict.items():  
+                    st = Stream(traces).copy() # Copy to avoid overwriting data
+                    st.detrend("linear")
+                    streams.append(st)
+                    new_dict[station_name].extend(st.traces)
+                    
+                # Save as mseed file
+                if save_mseed == True:
+                    merged_stream = streams[0].copy() # Copy to avoid overwriting data
+                    for st in streams[1:]:
+                        merged_stream += st
+                    merged_stream.merge()
+        
+                    merged_stream.write(f'{str(file_path)}', format="MSEED")
+                    print(f'Saved as {file_path}')
+
+                # Rewrite self.st
+                self.seismic.st = new_dict
+
+            return self.seismic
 
         # Window Function
         def window(self):

@@ -50,6 +50,9 @@ class Seismic:
         # Seismic Wind Analysis
         self.wind = self.Wind(self)
 
+        # AWS data
+        self.aws = None
+
 
     # Gather Data
     def get_seis(self, 
@@ -944,32 +947,459 @@ class Seismic:
 
         def __init__(self, seismic):
             self.seismic = seismic
-            self.wind_data = None
-            self.seismic_wind = self.SeismicWind(self)
+            self.aws = None
+            self.wd = None
+            self.seismic_wind = self.SeismicWind(seismic=self.seismic)
 
         # Wind Data
-        def get_wind_data(self):
-            pass
+        def get_aws(self,
+                    path,
+                    station_code,
+                    id_code):
+            """
+            Reads BoM weather station data from a 
+            specified path, station code, and id code. 
+            Then, it organises the data into a DataFrame 
+            and creates a datetime column 
+            from the relevant date and time columns.
+            
+            Parameters:
+                path (str): 
+                    The path to the directory containing the data files.
+                station_code (str): 
+                    The station code for the weather station.
+                id_code (str): 
+                    The id code for the weather station data.
+
+            Returns:
+                self.seismic:
+                    Seismic data
+                df (pd.DataFrame): 
+                    A DataFrame containing the weather station data.
+            """
+
+            # Define path
+            data_path = Path(path)
+            pq_path = data_path / f'HM01X_Data_{station_code}_{id_code}.parquet'
+            csv_path = data_path / f'HM01X_Data_{station_code}_{id_code}.txt'
+            if pq_path.exists():
+                df = pd.read_parquet(pq_path)
+            elif csv_path.exists():
+                df = pd.read_csv(csv_path, low_memory=False)
+            else:
+                raise FileNotFoundError(f"No data file found for station {station_code} and id {id_code}")
+        
+            # Create efficient UTC datetime columns.
+            if "datetime" not in df.columns:
+                df["datetime"] = pd.to_datetime(dict(
+                                                year=df["Year Month Day Hour Minutes in YYYY.2"],
+                                                month=df["MM.2"],
+                                                day=df["DD.2"],
+                                                hour=df["HH24.2"],
+                                                minute=df["MI format in Universal coordinated time"]))
+            self.aws = df
+
+            return self.aws
 
 
-        # Wind Analysis
+        def get_var(self,
+                    variable='Wind speed in km/hr',
+                    year=None, 
+                    month=None, 
+                    day=None,
+                    hour=None):
+            
+            # Check if time inputs are single valued or a range.
+            # Year
+            if isinstance(year, (tuple, list)) and len(year) == 2: 
+                start_year, end_year = year 
+                df_slice = self.aws[(self.aws['datetime'].dt.year >= start_year) & 
+                                (self.aws['datetime'].dt.year <= end_year) ].copy()
+            elif year is None or year < 2010 or year > 2025:
+                df_slice = self.aws.copy()
+            else:
+                df_slice = self.aws[self.aws['datetime'].dt.year == year].copy()
+            # Month
+            if isinstance(month, (tuple, list)) and len(month) == 2: 
+                start_month, end_month = month 
+                df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                                (df_slice['datetime'].dt.month <= end_month) ].copy()
+            elif isinstance(month, int): 
+                df_slice = df_slice[df_slice['datetime'].dt.month == month].copy()
+            # Day
+            if isinstance(day, (tuple, list)) and len(day) == 2:
+                start_day, end_day = day
+                df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
+                                    (df_slice['datetime'].dt.day <= end_day)].copy()
+            elif isinstance(day, int):
+                df_slice = df_slice[df_slice['datetime'].dt.day == day].copy()
+            # Hour
+            if isinstance(hour, (tuple, list)) and len(hour) == 2:
+                start_hour, end_hour = hour
+                df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                                    (df_slice['datetime'].dt.hour <= end_hour)].copy()
+            elif isinstance(hour, int):
+                df_slice = df_slice[df_slice['datetime'].dt.hour == hour].copy()
+            
+            # Check if there is data
+            if df_slice.empty: 
+                print("No data available for the selected time period.") 
+                return
+        
+            # Check if variable exists in the DataFrame
+            if variable not in df_slice.columns:
+                print(f"Variable '{variable}' not found in the DataFrame.")
+                return
+            
+            # Convert to numeric
+            df_slice[variable] = pd.to_numeric(df_slice[variable], errors='coerce')
+            var = df_slice[variable]
+        
+            df_slice['Wind direction in degrees true'] = pd.to_numeric(df_slice['Wind direction in degrees true'], errors='coerce')
+            df_slice['Wind direction in degrees true'] %= 360
+            WD = df_slice['Wind direction in degrees true']
+        
+            
+            var = var.to_numpy()
+            WD = WD.to_numpy()
+        
+            # Clean Data
+            valid_mask = ~np.isnan(var)
+        
+            var = var[valid_mask]
+            WD = WD[valid_mask]
+            time = df_slice['datetime'].to_numpy()[valid_mask]
+
+            self.wd = [time, var, WD]
+            self.seismic_wind.wd = self.wd
+            
+            return self.wd
+
+        # Plot aws speed
+        def plot_aws(self,
+                     ylabel = 'AWS Varaible',
+                     apply_smooth = False,
+                     smoothie = 3):
+            """
+            Plots the aws for a given year and month from the provided DataFrame.
+            
+            Parameters:
+                apply_smooth (bool): 
+                    True/False. Applying ObsPy smooth() function.
+                smoothie (int):
+                    Number of values to calculate moving average for smoothing.
+            """
+            # Create Figure 
+            plt.figure(figsize=(15,6))
+    
+            # Plot
+            plt.plot(self.wd[0], self.wd[1], 
+                    color='black', linewidth=0.5)
+            
+            # Plot Formating
+            plt.ylabel(f'{ylabel}')
+            plt.xlabel('Time')
+            ymax = np.max(self.wd[1]) # For y axis limit
+            plt.ylim(0, ymax *1.1)
+            plt.grid(alpha=0.3)
+            plt.tight_layout()
+            plt.show()
+
+            
+
+        # Plot wind speed and direction
+        def plot_rose_wind(self,
+                           year=None, 
+                           month=None, 
+                           day=None,
+                           hour=None):
+        
+            """
+            Plots a rose plot of wind speed and direction 
+            for a given year and month from the provided DataFrame.
+        
+            Parameters:
+                year (int or tuple): 
+                    The year(s) for plotting.
+                    None for all years, 
+                    A single year (2010-2025), 
+                    or a tuple of (start_year, end_year) for a range of years.
+                month (int or tuple): 
+                    The month(s) for plotting.
+                    None for the entire year,
+                    A single month (1-12),
+                    or a tuple of (start_month, end_month) for a range of months.
+                day (int or tuple): 
+                The day(s) for plotting.
+                    None for the entire month,
+                    A single day (1-31),
+                    or a tuple of (start_day, end_day) for a range of days.
+                hour (int or tuple):
+                    The hour(s) for plotting.
+                    None for entire day,
+                    A single hour (0-23),
+                    or a tuple of (start_hour, end_hour) for a range of hours.
+            """
+        
+            # Check if time inputs are single valued or a range.
+            # Year
+            if isinstance(year, (tuple, list)) and len(year) == 2: 
+                start_year, end_year = year 
+                df_slice = self.aws[(self.aws['datetime'].dt.year >= start_year) & 
+                                (self.aws['datetime'].dt.year <= end_year) ].copy()
+            elif year is None or year < 2010 or year > 2025:
+                df_slice = self.aws.copy()
+            else:
+                df_slice = self.aws[self.aws['datetime'].dt.year == year].copy()
+            # Month
+            if isinstance(month, (tuple, list)) and len(month) == 2: 
+                start_month, end_month = month 
+                df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
+                                (df_slice['datetime'].dt.month <= end_month) ].copy()
+            elif isinstance(month, int): 
+                df_slice = df_slice[df_slice['datetime'].dt.month == month].copy()
+            # Day
+            if isinstance(day, (tuple, list)) and len(day) == 2:
+                start_day, end_day = day
+                df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
+                                    (df_slice['datetime'].dt.day <= end_day)].copy()
+            elif isinstance(day, int):
+                df_slice = df_slice[df_slice['datetime'].dt.day == day].copy()
+            # Hour
+            if isinstance(hour, (tuple, list)) and len(hour) == 2:
+                start_hour, end_hour = hour
+                df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
+                                    (df_slice['datetime'].dt.hour <= end_hour)].copy()
+            elif isinstance(hour, int):
+                df_slice = df_slice[df_slice['datetime'].dt.hour == hour].copy()
+            
+            # Check if there is data.
+            if df_slice.empty: 
+                print("No data available for the selected time period.") 
+                return
+        
+            # Convert to numeric
+            df_slice['Wind speed in km/h'] = pd.to_numeric(df_slice['Wind speed in km/h'], 
+                                                            errors='coerce')
+            df_slice['Wind direction in degrees true'] = pd.to_numeric(df_slice['Wind direction in degrees true'],
+                                                                        errors='coerce')
+            df_slice['Wind direction in degrees true'] %= 360
+        
+            # Create variables
+            wind_speed = df_slice['Wind speed in km/h']
+            wind_dir = df_slice['Wind direction in degrees true']
+            
+            # Normalisation
+            # df_slice['Wind_norm'] = wind_speed / wind_speed.max()
+        
+            # Define 'bins'. Labels to categorise wind speed.
+            speed_bins = [0, 10, 38, 60, 90,np.inf]
+            labels = ["Light", "Moderate", "Strong", "Severe", "Extreme"]
+            # Create bin variables
+            df_slice['speed_bin'] = pd.cut(wind_speed, bins=speed_bins, labels=labels)
+            sector_width = 5
+            df_slice['dir_bin'] = (wind_dir // sector_width) * sector_width
+            # Create frequency variables
+            freq = df_slice.groupby(['dir_bin', 'speed_bin']).size().reset_index(name='count')
+            freq['percentage'] = 100 * freq['count'] / freq['count'].sum()
+        
+            #Title construction
+            title = f"Wind Rose at Station:{df_slice['Station Number'].iloc[0]} @ "
+            # Year
+            if isinstance(year, (tuple, list)):
+                title += f"{year[0]} to {year[1]}"
+            elif year is None:
+                title += "All Years"
+            else:
+                title += f"{year}"
+            # Month
+            if isinstance(month, (tuple, list)):
+                title += f", Months:{month[0]} to {month[1]}"
+            elif isinstance(month, int):
+                title += f", Month:{month}"
+            # Day
+            if isinstance(day, (tuple, list)):
+                title += f", Days:{day[0]} to {day[1]}"
+            elif isinstance(day, int):
+                title += f", Day:{day}"
+            # Hour
+            if isinstance(hour, (tuple, list)):
+                title += f", Hours:{hour[0]} to {hour[1]}"
+            elif isinstance(hour, int):
+                title += f", Hour:{hour}"
+        
+            #Figure 
+            fig = px.bar_polar(freq, 
+                                r="percentage", 
+                                theta="dir_bin", 
+                                color="speed_bin", 
+                                color_continuous_scale=px.colors.sequential.Plasma)
+            fig.update_layout(
+                title=title,
+                polar=dict(
+                    radialaxis=dict(
+                        tickformat=".0f%",
+                        ticksuffix="%",
+                        angle=90,
+                        side="counterclockwise")))
+            fig.show()
+            
+
+
+
+        # Seismic Wind Analysis
         class SeismicWind:
 
-            def __init__(self, wind):
-                self.wind = wind
+            def __init__(self, seismic):
+                self.seismic = seismic
+                self.aws = None
                 self.models = self.Models(self)
+                self.fft = None
+                self.wd = None
 
             # FFT Analysis
-            def spectra_fft(self):
-                pass
+            def spectra_fft(self,
+                            pad_value=np.nan):
+                
+                """
+                Trim 30 minute segments of seismic data which match AWS dataset.
+                Apply a real fast fourier transform to compute the frequency spectrum 
+                for each seismic component and calculate the powerfor each time step. 
+            
+                Parameters:
+                    seismic_mseed_file (str):
+                        Title of saved mseed file.
+                        Seismic data must begin atleast 30 minutes before the first AWS timestamp
+                        and end anytime after the final AWS timestamp.
+                    pad_value (float):
+                        Value to use for padding.
+            
+                Returns:
+                    all_spectra (list):
+                        A list of dictionaries containing the frequency and power 
+                        for each component (EW, NS, Z) for each station and time period.
+                """
 
-            # Plot wind speed
-            def plot_wind(self):
-                pass
+                # Wave_dict
+                wave_dict = self.seismic.st
 
-            # Plot wind speed and direction
-            def plot_rose_wind(self):
-                pass
+                 # Setup 
+                station_list = list(wave_dict.keys())
+                aws_times = self.wd[0]   # timestamps
+                # EW, NS, Z components following real fast fourier transform (RFFT)
+                all_spectra = []
+            
+                # Loop through all stations
+                for station in station_list:
+                    
+                    spectra = []
+            
+                    # Organise Streams
+                    st = Stream(wave_dict[station])
+            
+                    # Puts in alphabetical order. 
+                    # E, N, Z
+                    st.sort(['channel'])   
+            
+                    EW = st.select(channel="*E")[0].data
+                    NS = st.select(channel="*N")[0].data
+                    Z  = st.select(channel="*Z")[0].data
+                    
+                    # EW, NS, Z all same length and freq
+                    fs = st[0].stats.sampling_rate
+                    start_time = st[0].stats.starttime
+            
+                    # Define Window Length Dependent on AWS
+                    # 30 Min (times 60 sec) AWS Measurement window
+                    # times seismic sampling rate
+                    window_length = int(30 * 60 * fs)
+            
+                    # Setup time index list
+                    start_i = []
+            
+                    # Loop through all time periods
+                    for time in aws_times:
+                        
+                        # 30 min collection time before AWS measurement
+                        t0 = UTC(str(time)) - timedelta(minutes=30)
+                        # Define index
+                        idx = int((t0 - start_time) * fs)
+                        start_i.append(idx)
+                    
+                    # Convert to np array
+                    start_i = np.array(start_i)
+                    # Define n
+                    n_starts = start_i.shape[0]
+            
+                    # Setup Output Arrays
+                    EW_out = np.full((n_starts, window_length), pad_value, dtype=EW.dtype) 
+                    NS_out = np.full((n_starts, window_length), pad_value, dtype=NS.dtype) 
+                    Z_out = np.full((n_starts, window_length), pad_value, dtype=Z.dtype) 
+            
+                    # Define the offsets
+                    offsets = np.arange(window_length)
+            
+                    # Define the seismic index based on the offsets
+                    index = start_i[:, None] + offsets[None, :]
+            
+                    # Check if data exists within the index bounds
+                    EW_in_bounds = (index >= 0) & (index < EW.shape[0])
+                    NS_in_bounds = (index >= 0) & (index < NS.shape[0])
+                    Z_in_bounds = (index >= 0) & (index < Z.shape[0])
+            
+                    # Define the valid indicies
+                    EW_flat_idx = index[EW_in_bounds]
+                    NS_flat_idx = index[NS_in_bounds]
+                    Z_flat_idx = index[Z_in_bounds]
+            
+                    # Place the balid indicies into the output arrays
+                    EW_out[EW_in_bounds] = EW[EW_flat_idx]
+                    NS_out[NS_in_bounds] = NS[NS_flat_idx]
+                    Z_out[Z_in_bounds] = Z[Z_flat_idx]
+            
+                    # Stop if seismic data doesn't line up
+                    if (np.isnan(EW_out).any() or np.isnan(NS_out).any() or np.isnan(Z_out).any()):
+                        print('Error: Seismic data needs to span at least 30 minutes before AWS start time up until the final AWS time stamp.')
+                        return None
+            
+                    # Apply Hann Window 
+                    taper_length = int(0.02 * window_length) # 2% taper
+                    window = np.ones(window_length) # Establish uniform window
+                    hann = np.hanning(2 * taper_length) # Create hann window for both (2) sides of data
+                    window[:taper_length] = hann[:taper_length] # Apply 2% to first half
+                    window[-taper_length:] = hann[taper_length:] # Apply 2% to second half
+                    # Apply
+                    EW_win = EW_out * window[None, :]
+                    NS_win = NS_out * window[None, :]
+                    Z_win = Z_out * window[None, :]
+            
+                    # Compute rfft for each component
+                    y_EW = rfft(EW_win, axis = 1)
+                    y_NS = rfft(NS_win, axis = 1)
+                    y_Z = rfft(Z_win, axis = 1)
+                
+                    # Compute rfft frequency
+                    freq = rfftfreq(window_length, 1/fs)
+            
+                    # Calculate power for each component
+                    EW_p = np.abs(y_EW)**2
+                    NS_p = np.abs(y_NS)**2
+                    Z_p = np.abs(y_Z)**2
+            
+                    # Save spectra as a dictionary
+                    spectra.append({'freq': freq,
+                                    'EW': EW_p,
+                                    'NS': NS_p,
+                                    'Z': Z_p,
+                                    'time' : aws_times,
+                                    'aws_values' : self.wd[1],
+                                    'wind_direction' : self.wd[2]})
+            
+                    all_spectra.append({station: spectra})
+                    self.fft = all_spectra 
+
+                return self.fft
+            
 
 
             # Regression Models

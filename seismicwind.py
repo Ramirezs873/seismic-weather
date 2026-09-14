@@ -878,19 +878,65 @@ class Seismic:
             
 
 
-    # Using seismic data create stuff
+    # Seismic Analysis
     class Analysis:
 
         def __init__(self, seismic):
             self.seismic = seismic
 
         # Plot Streams
-        def plot_streams(self):
-            pass
+        def plot_streams(self,
+                         color='black'):
+    
+            """
+            Plot seismic waveform data stored in a dictionary.
+            
+            Parameters:
+            color (str):
+                Colour for the waveform plots. Default is 'black'.
+            """
+            # Wave_dict
+            wave_dict = self.seismic.st
+            
+            # Loop through and plot streams
+            for station_name in wave_dict:
+                if not wave_dict[station_name]:    # Skip empty stations
+                    print(f"Skipping empty station: {station_name}")
+                    continue
+                st = Stream(wave_dict[station_name])
+                print(f"Plotting {station_name}")
+                st.plot(color=color)
+            
 
         # Create PPSD Plots
         def ppsd(self):
             pass
+
+
+        # Inspect Amplitudes
+        def amp(self):
+            pass
+
+
+        # Cross Correlation
+        def cc_correction(self):
+            pass
+
+
+        # Tabulate Cross Correlation
+        def cc_table(self):
+            pass
+
+
+        # Event Data
+        def events(self):
+            pass
+
+
+        # Station Inventory
+        def inventory(self):
+            pass
+        
 
 
     # Seismic Wind Analysis

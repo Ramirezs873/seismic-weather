@@ -5310,9 +5310,6 @@ def optimise_ridge(spectra,
                     n_splits = 5,
                     min_WS = None):
     
-    # Setup Result Lists
-    results = []
-
     # Bands
     # Create Bandwidths
     bands = []
@@ -5320,8 +5317,7 @@ def optimise_ridge(spectra,
         f2 = f1 + f_band_width
         band = (f1, f2)
         bands.append(band)
-    # Num of Bands
-    n_bands = len(bands)
+    
     # Create Band Centers
     band_centres = []
     for f1, f2 in bands:
@@ -5344,9 +5340,6 @@ def optimise_ridge(spectra,
         dir_radians = np.deg2rad(wind_direction)
         dir_sin = np.sin(dir_radians)
         dir_cos = np.cos(dir_radians)
-        
-        # Setup results
-        station_results = []
         
         # Setup powers
         X_Z = np.zeros((len(aws_values), len(bands)))
@@ -5415,9 +5408,6 @@ def optimise_EN(spectra,
                 n_splits = 5,
                 min_WS = None):
 
-    # Setup Result Lists
-    results = []
-
     # Bands
     # Create Bandwidths
     bands = []
@@ -5450,8 +5440,6 @@ def optimise_EN(spectra,
         dir_sin = np.sin(dir_radians)
         dir_cos = np.cos(dir_radians)
         
-        # Setup results
-        station_results = []
         
         # Setup powers
         X_Z = np.zeros((len(aws_values), len(bands)))
@@ -5543,8 +5531,6 @@ def optimise_SVR(spectra,
                 n_splits = 5,
                 min_WS = None):
     
-    # Setup Result Lists
-    results = []
 
     # Bands
     # Create Bandwidths
@@ -5578,9 +5564,7 @@ def optimise_SVR(spectra,
         dir_sin = np.sin(dir_radians)
         dir_cos = np.cos(dir_radians)
         
-        # Setup results
-        station_results = []
-        
+       
         # Setup powers
         X_Z = np.zeros((len(aws_values), len(bands)))
         X_NS = np.zeros((len(aws_values), len(bands)))
@@ -5690,9 +5674,6 @@ def optimise_RF(spectra,
                 min_WS = None,
                 WS_only = True):
     
-    # Setup Result Lists
-    results = []
-
     # Bands
     # Create Bandwidths
     bands = []
@@ -5700,8 +5681,6 @@ def optimise_RF(spectra,
         f2 = f1 + f_band_width
         band = (f1, f2)
         bands.append(band)
-    # Num of Bands
-    n_bands = len(bands)
     # Create Band Centers
     band_centres = []
     for f1, f2 in bands:

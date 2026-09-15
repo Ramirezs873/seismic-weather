@@ -133,7 +133,10 @@ class Seismic:
 ```
 
 ### Data formats
-AWS data is read as a .txt or .parquet file. AWS file title should read: 'HM01X_Data_{station_code}_{id_code}'
+AWS data is read as a .txt or .parquet file. 
+
+AWS file title should read: 'HM01X_Data_{station_code}_{id_code}'
+
 Seismic data is read as a dictionary of isolated components for each station. 
 
 ---

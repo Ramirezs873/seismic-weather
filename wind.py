@@ -6984,19 +6984,19 @@ def full_spectrum_SVR_WS_WD(spectra,
     return results
 
 def full_spectrum_EN_WS_WD(spectra,
-                                    fmin = 1,
-                                    fmax = 49,
-                                    f_band_width = 1,
-                                    step_size = 1,
-                                    n_repeats = 3,
-                                    min_WS = None,
-                                    poly_degree = 2,
-                                    plot_stat_results = True,
-                                    plot_results = True,
-                                    plot_residuals = True,
-                                    plot_power_aws = True,
-                                    variable_name = 'AWS Wind Speed (km/hr)'):
-    
+                            fmin = 1,
+                            fmax = 49,
+                            f_band_width = 1,
+                            step_size = 1,
+                            n_repeats = 3,
+                            min_WS = None,
+                            poly_degree = 2,
+                            plot_stat_results = True,
+                            plot_results = True,
+                            plot_residuals = True,
+                            plot_power_aws = True,
+                            variable_name = 'AWS Wind Speed (km/hr)'):
+
     """
     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
     using a ElasticNet regression model. Combines all seismic components into one model.

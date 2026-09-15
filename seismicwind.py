@@ -181,6 +181,8 @@ class Seismic:
     # Help Funcs to add:
         # save_as_mseed()
         # read_path()
+        # Create bands
+        # Model Setup
 
 
     # Preprocess data
@@ -945,11 +947,13 @@ class Seismic:
     # Seismic Wind Analysis
     class Wind:
 
+
         def __init__(self, seismic):
             self.seismic = seismic
             self.aws = None
             self.wd = None
             self.seismic_wind = self.SeismicWind(seismic=self.seismic)
+
 
         # Wind Data
         def get_aws(self,
@@ -1075,6 +1079,7 @@ class Seismic:
             
             return self.wd
 
+
         # Plot aws speed
         def plot_aws(self,
                      ylabel = 'AWS Varaible',
@@ -1106,7 +1111,6 @@ class Seismic:
             plt.show()
 
             
-
         # Plot wind speed and direction
         def plot_rose_wind(self,
                            year=None, 
@@ -1245,10 +1249,9 @@ class Seismic:
             fig.show()
             
 
-
-
         # Seismic Wind Analysis
         class SeismicWind:
+
 
             def __init__(self, seismic):
                 self.seismic = seismic
@@ -1401,26 +1404,537 @@ class Seismic:
                 return self.fft
             
 
-
-            # Regression Models
+            # Regression Model
             class Models:
+
 
                 def __init__(self, seismic_wind):
                     self.seismic_wind = seismic_wind
 
+
                 # Optimisation
-                def optimise_ridge(self):
-                    pass
+                def optimise_ridge(self,
+                                   fmin = 1,
+                                   fmax = 49,
+                                   f_band_width = 1,
+                                   step_size = 1,
+                                   n_splits = 5,
+                                   min_WS = None):
+                    # Bands
+                    # Create Bandwidths
+                    bands = []
+                    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+                        f2 = f1 + f_band_width
+                        band = (f1, f2)
+                        bands.append(band)
+                    
+                    # Create Band Centers
+                    band_centres = []
+                    for f1, f2 in bands:
+                        band_centre = [(f1 + f2)/2]
+                        band_centres.append(band_centre)
+                
+                    # Loop through stations
+                    for station_dict in self.seismic_wind.fft:
+                
+                        # Setup Variables
+                        station = list(station_dict.keys())[0] 
+                        EW_power = station_dict[station][0]['EW']
+                        NS_power = station_dict[station][0]['NS']
+                        Z_power = station_dict[station][0]['Z']
+                        freq = station_dict[station][0]['freq']
+                        aws_values = station_dict[station][0]['aws_values']
+                        wind_direction = station_dict[station][0]['wind_direction']
+                
+                        # Angle wrap around problem
+                        dir_radians = np.deg2rad(wind_direction)
+                        dir_sin = np.sin(dir_radians)
+                        dir_cos = np.cos(dir_radians)
+                        
+                        # Setup powers
+                        X_Z = np.zeros((len(aws_values), len(bands)))
+                        X_NS = np.zeros((len(aws_values), len(bands)))
+                        X_EW = np.zeros((len(aws_values), len(bands)))
+                
+                        # Apply bandwidths to data
+                        for i, (f1,f2) in enumerate(bands):
+                            band_width = (freq >= f1) & (freq < f2)
+                
+                            # Convert to log to better inspect power scales and apply bandwidth
+                            # [:, band_width], select frequencies and slice unwanted freq data from the row
+                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+                
+                        # Stack all together to process all together as a larger dataset
+                        X_all = np.column_stack([X_Z, X_NS, X_EW])
+                        y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+                
+                
+                        # Should the wind speed threshold be applied before or after training the model?
+                        # Apply minimum WS threshold
+                        if min_WS is not None:
+                            mask = y_all[:, 0] > min_WS
+                            X_all = X_all[mask]
+                            y_all = y_all[mask]
+                            
+                        # Train Model
+                        X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
+                
+                        # Find best alpha
+                        
+                        # setup alpha list
+                        alphas = np.logspace(-4, 4, 100)
+                
+                
+                        cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+                
+                        # Ridge
+                        # Pipeline
+                        # Scale, RidgeCV 
+                        var_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
+                        sin_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
+                        cos_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
+                
+                        var_ridge.fit(X_all_train, y_all_train[:, 0])
+                        sin_ridge.fit(X_all_train, y_all_train[:, 1])
+                        cos_ridge.fit(X_all_train, y_all_train[:, 2])
+                
+                        print("WS alpha:", var_ridge.named_steps['ridge'].alpha_,
+                                "CV R²:", var_ridge.named_steps['ridge'].best_score_)
+                        print("--------------------------------------------------")
+                        print("Sin2 alpha:", sin_ridge.named_steps['ridge'].alpha_,
+                                "CV R²:", sin_ridge.named_steps['ridge'].best_score_)
+                        print("--------------------------------------------------")
+                        print("Cos2 alpha:", cos_ridge.named_steps['ridge'].alpha_,
+                                "CV R²:", cos_ridge.named_steps['ridge'].best_score_)
 
-                def optimise_EN(self):
-                    pass
 
-                def optimise_SVR(self):
-                    pass
+                def optimise_EN(self,
+                                fmin = 1,
+                                fmax = 49,
+                                f_band_width = 1,
+                                step_size = 1,
+                                n_splits = 5,
+                                min_WS = None):
+                    
+                    # Bands
+                    # Create Bandwidths
+                    bands = []
+                    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+                        f2 = f1 + f_band_width
+                        band = (f1, f2)
+                        bands.append(band)
+                    # Num of Bands
+                    n_bands = len(bands)
+                    # Create Band Centers
+                    band_centres = []
+                    for f1, f2 in bands:
+                        band_centre = [(f1 + f2)/2]
+                        band_centres.append(band_centre)
+                
+                    # Loop through stations
+                    for station_dict in self.seismic_wind.fft:
+                
+                        # Setup Variables
+                        station = list(station_dict.keys())[0] 
+                        EW_power = station_dict[station][0]['EW']
+                        NS_power = station_dict[station][0]['NS']
+                        Z_power = station_dict[station][0]['Z']
+                        freq = station_dict[station][0]['freq']
+                        aws_values = station_dict[station][0]['aws_values']
+                        wind_direction = station_dict[station][0]['wind_direction']
+                
+                        # Angle wrap around problem
+                        dir_radians = np.deg2rad(wind_direction)
+                        dir_sin = np.sin(dir_radians)
+                        dir_cos = np.cos(dir_radians)
+                        
+                        
+                        # Setup powers
+                        X_Z = np.zeros((len(aws_values), len(bands)))
+                        X_NS = np.zeros((len(aws_values), len(bands)))
+                        X_EW = np.zeros((len(aws_values), len(bands)))
+                
+                        # Apply bandwidths to data
+                        for i, (f1,f2) in enumerate(bands):
+                            band_width = (freq >= f1) & (freq < f2)
+                
+                            # Convert to log to better inspect power scales and apply bandwidth
+                            # [:, band_width], select frequencies and slice unwanted freq data from the row
+                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+                
+                        # Stack all together to process all together as a larger dataset
+                        X_all = np.column_stack([X_Z, X_NS, X_EW])
+                        y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+                
+                
+                        # Should the wind speed threshold be applied before or after training the model?
+                        # Apply minimum WS threshold
+                        if min_WS is not None:
+                            mask = y_all[:, 0] > min_WS
+                            X_all = X_all[mask]
+                            y_all = y_all[mask]
+                            
+                        # Train Model
+                        X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
+                
+                        # Find best alpha & l1 ratio combination
+                        # setup alpha list
+                        alphas = np.logspace(-3, 3, 20)
+                        l1s = np.linspace(0.01, 1.0, 15)
+                
+                        cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+                
+                        # ElasticNet
+                        # Pipeline
+                        # Scale, ElasticNet 
+                        var_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=50000))])
+                        sin_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=50000))])
+                        cos_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=50000))])
+                
+                        var_EN.fit(X_all_train, y_all_train[:, 0])
+                        sin_EN.fit(X_all_train, y_all_train[:, 1])
+                        cos_EN.fit(X_all_train, y_all_train[:, 2])
+                
+                        # Get optimised values
+                        var_alpha = var_EN.named_steps['enet'].alpha_
+                        var_l1 = var_EN.named_steps['enet'].l1_ratio_
+                
+                        sin_alpha = sin_EN.named_steps['enet'].alpha_
+                        sin_l1 = sin_EN.named_steps['enet'].l1_ratio_
+                
+                        cos_alpha = cos_EN.named_steps['enet'].alpha_
+                        cos_l1 = cos_EN.named_steps['enet'].l1_ratio_
+                
+                        # Find CV R2 for these params
+                        var_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=var_alpha, l1_ratio=var_l1, max_iter=50000))])
+                        sin_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=sin_alpha, l1_ratio=sin_l1, max_iter=50000))])
+                        cos_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=cos_alpha, l1_ratio=cos_l1, max_iter=50000))])      
+                
+                        # Cross Validation
+                        var_scores = cross_val_score(var_EN_best, X_all_train, y_all_train[:, 0], cv=cv, scoring='r2')
+                        sin_scores = cross_val_score(sin_EN_best, X_all_train, y_all_train[:, 1], cv=cv, scoring='r2')
+                        cos_scores = cross_val_score(cos_EN_best, X_all_train, y_all_train[:, 2], cv=cv, scoring='r2')
+                
+                        # Print results
+                        print("WS alpha:", var_alpha,
+                                "WS l1_ratio:", var_l1,
+                                "WS CV R²:", var_scores.mean(), "+/-", var_scores.std())
+                        print("--------------------------------------------------")
+                        print("Sin2 alpha:", sin_alpha,
+                                "Sin2 l1_ratio:", sin_l1,
+                                "Sin2 CV R²:", sin_scores.mean(), "+/-", sin_scores.std())
+                        print("--------------------------------------------------")
+                        print("Cos2 alpha:", cos_alpha,
+                                "Cos2 l1_ratio:", cos_l1,
+                                "Cos2 CV R²:", cos_scores.mean(), "+/-", cos_scores.std())
 
-                def optimise_RF(self):
-                    pass
+                def optimise_SVR(self,
+                                fmin = 1,
+                                fmax = 49,
+                                f_band_width = 1,
+                                step_size = 1,
+                                n_splits = 5,
+                                min_WS = None):
+                    # Bands
+                    # Create Bandwidths
+                    bands = []
+                    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+                        f2 = f1 + f_band_width
+                        band = (f1, f2)
+                        bands.append(band)
+                    # Num of Bands
+                    n_bands = len(bands)
+                    # Create Band Centers
+                    band_centres = []
+                    for f1, f2 in bands:
+                        band_centre = [(f1 + f2)/2]
+                        band_centres.append(band_centre)
+                
+                    # Loop through stations
+                    for station_dict in self.seismic_wind.fft:
+                
+                        # Setup Variables
+                        station = list(station_dict.keys())[0] 
+                        EW_power = station_dict[station][0]['EW']
+                        NS_power = station_dict[station][0]['NS']
+                        Z_power = station_dict[station][0]['Z']
+                        freq = station_dict[station][0]['freq']
+                        aws_values = station_dict[station][0]['aws_values']
+                        wind_direction = station_dict[station][0]['wind_direction']
+                
+                        # Angle wrap around problem
+                        dir_radians = np.deg2rad(wind_direction)
+                        dir_sin = np.sin(dir_radians)
+                        dir_cos = np.cos(dir_radians)
+                        
+                       
+                        # Setup powers
+                        X_Z = np.zeros((len(aws_values), len(bands)))
+                        X_NS = np.zeros((len(aws_values), len(bands)))
+                        X_EW = np.zeros((len(aws_values), len(bands)))
+                
+                        # Apply bandwidths to data
+                        for i, (f1,f2) in enumerate(bands):
+                            band_width = (freq >= f1) & (freq < f2)
+                
+                            # Convert to log to better inspect power scales and apply bandwidth
+                            # [:, band_width], select frequencies and slice unwanted freq data from the row
+                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+                
+                        # Stack all together to process all together as a larger dataset
+                        X_all = np.column_stack([X_Z, X_NS, X_EW])
+                        y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+                
+                
+                        # Should the wind speed threshold be applied before or after training the model?
+                        # Apply minimum WS threshold
+                        if min_WS is not None:
+                            mask = y_all[:, 0] > min_WS
+                            X_all = X_all[mask]
+                            y_all = y_all[mask]
+                            
+                        # Train Model
+                        X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
+                
+                        # Find best alpha
+                        
+                        # setup parameter lists
+                        c_list = np.logspace(-4, 7, 10)
+                        gamma_list = np.logspace(-4, 4, 10)
+                        epsilon_list = np.linspace(0.05, 3, 15)
+                
+                        best_var_r2 = -np.inf
+                        best_sin_r2 = -np.inf
+                        best_cos_r2 = -np.inf
+                
+                        cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+                
+                        for c in c_list:
+                            for g in gamma_list:
+                                for e in epsilon_list:
+                                    # Pipeline
+                                    # Scale, SVR
+                                    var_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
+                                    sin_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
+                                    cos_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
+                
+                                    # Cross Validate
+                                    var_score = cross_val_score(var_svr, X_all_train, y_all_train[:, 0], cv=cv, scoring ='r2', n_jobs=-1)
+                                    sin_score = cross_val_score(sin_svr, X_all_train, y_all_train[:, 1], cv=cv, scoring ='r2', n_jobs=-1)
+                                    cos_score = cross_val_score(cos_svr, X_all_train, y_all_train[:, 2], cv=cv, scoring ='r2', n_jobs=-1)
+                        
+                                    # CV R2
+                                    var_mean_r2 = var_score.mean()
+                                    sin_mean_r2 = sin_score.mean()
+                                    cos_mean_r2 = cos_score.mean()
+                
+                                    # Note Parameters
+                                    params = [c, g, e]
+                
+                                    # Is it better than previous iteration? If yes then save params
+                                    # Save best var model
+                                    if var_mean_r2 > best_var_r2:
+                                        best_var_r2 = var_mean_r2
+                                        best_var_params = params.copy()
+                
+                                    # Save best sin2 model
+                                    if sin_mean_r2 > best_sin_r2:
+                                        best_sin_r2 = sin_mean_r2
+                                        best_sin_params = params.copy()
+                
+                                    # Save best cos2 model
+                                    if cos_mean_r2 > best_cos_r2:
+                                        best_cos_r2 = cos_mean_r2
+                                        best_cos_params = params.copy()
+                
+                        print("WS:")
+                        print("C:", best_var_params[0])
+                        print("gamma:", best_var_params[1])
+                        print("epsilon:", best_var_params[2])
+                        print("CV R²:", best_var_r2)
+                        print("--------------------------------------------------")
+                        print("Sin2:")
+                        print("C:", best_sin_params[0])
+                        print("gamma:", best_sin_params[1])
+                        print("epsilon:", best_sin_params[2])
+                        print("CV R²:", best_sin_r2)
+                        print("--------------------------------------------------")
+                        print("Cos2:")
+                        print("C:", best_cos_params[0])
+                        print("gamma:", best_cos_params[1])
+                        print("epsilon:", best_cos_params[2])
+                        print("CV R²:", best_cos_r2)
 
+                def optimise_RF(self,
+                                fmin = 1,
+                                fmax = 49,
+                                f_band_width = 1,
+                                step_size = 1,
+                                n_splits = 5,
+                                min_WS = None,
+                                WS_only = True):
+                    
+                        # Bands
+                        # Create Bandwidths
+                        bands = []
+                        for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+                            f2 = f1 + f_band_width
+                            band = (f1, f2)
+                            bands.append(band)
+                        # Create Band Centers
+                        band_centres = []
+                        for f1, f2 in bands:
+                            band_centre = [(f1 + f2)/2]
+                            band_centres.append(band_centre)
+                    
+                        # Loop through stations
+                        for station_dict in self.seismic_wind.fft:
+                    
+                            # Setup Variables
+                            station = list(station_dict.keys())[0] 
+                            EW_power = station_dict[station][0]['EW']
+                            NS_power = station_dict[station][0]['NS']
+                            Z_power = station_dict[station][0]['Z']
+                            freq = station_dict[station][0]['freq']
+                            aws_values = station_dict[station][0]['aws_values']
+                            wind_direction = station_dict[station][0]['wind_direction']
+                    
+                            # Angle wrap around problem
+                            dir_radians = np.deg2rad(wind_direction)
+                            dir_sin = np.sin(dir_radians)
+                            dir_cos = np.cos(dir_radians)
+                            
+                            # Setup results
+                            station_results = []
+                            
+                            # Setup powers
+                            X_Z = np.zeros((len(aws_values), len(bands)))
+                            X_NS = np.zeros((len(aws_values), len(bands)))
+                            X_EW = np.zeros((len(aws_values), len(bands)))
+                    
+                            # Apply bandwidths to data
+                            for i, (f1,f2) in enumerate(bands):
+                                band_width = (freq >= f1) & (freq < f2)
+                    
+                                # Convert to log to better inspect power scales and apply bandwidth
+                                # [:, band_width], select frequencies and slice unwanted freq data from the row
+                                # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+                                X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+                                X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+                                X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+                    
+                            # Stack all together to process all together as a larger dataset
+                            X_all = np.column_stack([X_Z, X_NS, X_EW])
+                            y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+                    
+                    
+                            # Should the wind speed threshold be applied before or after training the model?
+                            # Apply minimum WS threshold
+                            if min_WS is not None:
+                                mask = y_all[:, 0] > min_WS
+                                X_all = X_all[mask]
+                                y_all = y_all[mask]
+                                
+                            # Train Model
+                            X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
+                    
+                            # Find best paramters
+                            # setup parameter lists
+                            n_estimators = [50, 100, 150, 200]
+                            depths = [5, 10, 15, None]
+                            min_samp_split = [2, 5, 10]
+                            min_samp_leaf = [1, 3, 5]
+                            max_feat = [0.25, 0.5, 0.75, 1.0]
+                    
+                            best_var_r2 = -np.inf
+                            if WS_only == False:
+                                best_sin_r2 = -np.inf
+                                best_cos_r2 = -np.inf
+                    
+                            cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+                    
+                            for n_est in n_estimators:
+                                for d in depths:
+                                    for min_split in min_samp_split:
+                                        for min_leaf in min_samp_leaf:
+                                            for feat in max_feat:
+                                                # Random Forest
+                                                var_rf = RandomForestRegressor(n_estimators=n_est, max_depth=d,
+                                                                               min_samples_split=min_split,min_samples_leaf=min_leaf,
+                                                                               max_features=feat, random_state=42, n_jobs=-1)
+                                                if WS_only == False:
+                                                    sin_rf = RandomForestRegressor(n_estimators=n_est, max_depth=d,
+                                                                                    min_samples_split=min_split,min_samples_leaf=min_leaf,
+                                                                                    max_features=feat, random_state=42, n_jobs=-1)
+                                                    cos_rf = RandomForestRegressor(n_estimators=n_est, max_depth=d,
+                                                                                    min_samples_split=min_split,min_samples_leaf=min_leaf,
+                                                                                    max_features=feat, random_state=42, n_jobs=-1)
+                    
+                                                # Cross Validate
+                                                var_score = cross_val_score(var_rf, X_all_train, y_all_train[:, 0], cv=cv, scoring ='r2', n_jobs=-1)
+                                                if WS_only == False:
+                                                    sin_score = cross_val_score(sin_rf, X_all_train, y_all_train[:, 1], cv=cv, scoring ='r2', n_jobs=-1)
+                                                    cos_score = cross_val_score(cos_rf, X_all_train, y_all_train[:, 2], cv=cv, scoring ='r2', n_jobs=-1)
+                                    
+                                                # CV R2
+                                                var_mean_r2 = var_score.mean()
+                                                if WS_only == False:
+                                                    sin_mean_r2 = sin_score.mean()
+                                                    cos_mean_r2 = cos_score.mean()
+                            
+                                                # Note Parameters
+                                                params = [n_est, d, min_split, min_leaf, feat]
+                            
+                                                # Is it better than previous iteration? If yes then save params
+                                                # Save best var model
+                                                if var_mean_r2 > best_var_r2:
+                                                    best_var_r2 = var_mean_r2
+                                                    best_var_params = params.copy()
+                    
+                                                if WS_only == False:
+                                                    # Save best sin2 model
+                                                    if sin_mean_r2 > best_sin_r2:
+                                                        best_sin_r2 = sin_mean_r2
+                                                        best_sin_params = params.copy()
+                                
+                                                    # Save best cos2 model
+                                                    if cos_mean_r2 > best_cos_r2:
+                                                        best_cos_r2 = cos_mean_r2
+                                                        best_cos_params = params.copy()
+                                        
+                    
+                            print("WS:")
+                            print("n_estimators:", best_var_params[0])
+                            print("depths:", best_var_params[1])
+                            print("min_sample_split:", best_var_params[2])
+                            print("min_sample_leaf:", best_var_params[3])
+                            print("max_features:", best_var_params[4])
+                            print("CV R²:", best_var_r2)
+                            print("--------------------------------------------------")
+                            if WS_only == False:
+                                print("Sin2:")
+                                print("n_estimators:", best_sin_params[0])
+                                print("depths:", best_sin_params[1])
+                                print("min_sample_split:", best_sin_params[2])
+                                print("min_sample_leaf:", best_sin_params[3])
+                                print("max_features:", best_sin_params[4])
+                                print("CV R²:", best_sin_r2)
+                                print("--------------------------------------------------")
+                                print("n_estimators:", best_cos_params[0])
+                                print("depths:", best_cos_params[1])
+                                print("min_sample_split:", best_cos_params[2])
+                                print("min_sample_leaf:", best_cos_params[3])
+                                print("max_features:", best_cos_params[4])
+                                print("CV R²:", best_cos_r2)
 
                 # Model Analysis
                 def RF(self):

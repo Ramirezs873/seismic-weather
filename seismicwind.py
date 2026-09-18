@@ -1082,9 +1082,7 @@ class Seismic:
 
         # Plot aws speed
         def plot_aws(self,
-                     ylabel = 'AWS Varaible',
-                     apply_smooth = False,
-                     smoothie = 3):
+                     ylabel = 'AWS Varaible'):
             """
             Plots the aws for a given year and month from the provided DataFrame.
             

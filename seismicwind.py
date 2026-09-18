@@ -103,13 +103,14 @@ class Seismic:
         """
 
         # Check if file already exists
-        time = t_start.strftime("%Y-%m-%d") # Start date of data
+        
 
         # Config Support
         base_path = Path(self.config["seismic_data_path"]) if self.config else Path(".")
         base_path.mkdir(parents=True, exist_ok=True)
 
         if file_name is None:
+            time = t_start.strftime("%Y-%m-%d") # Start date of data
             filename = f"{network}_{station}_{time}"
         else:
             filename = file_name

@@ -4492,25 +4492,29 @@ class Seismic:
                 
                     return results
 
-                def polar_RF(self,
-                             fmin = 1,
-                             fmax = 49,
-                             f_band_width = 1,
-                             step_size = 1,
-                             n_repeats = 3,
-                             min_WS = None,
-                             poly_degree = 2,
-                             plot_importance = True,
-                             plot_results = True,
-                             plot_polar = True,
-                             plot_power_aws = True,
-                             variable_name = 'AWS Wind Speed (km/hr)',
-                             alpha = 0.08):
+                def polar_Ridge(self,
+                                fmin = 1,
+                                fmax = 49,
+                                f_band_width = 1,
+                                step_size = 1,
+                                n_repeats = 3,
+                                min_WS = None,
+                                poly_degree = 2,
+                                plot_importance = True,
+                                plot_results = True,
+                                plot_polar = True,
+                                plot_power_aws = True,
+                                variable_name = 'AWS Wind Speed (km/hr)',
+                                alpha = 0.08):
 
                     """
                     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
-                    using a Ridge regression model. Combines all seismic components into one model.
-                    Includes a y_test array of AWS and WD. 
+                    using a Ridge regression model. 
+                    Converts the channel power into polar coordinates.
+                    Inputs the radial component, combined seismic power magnitude,
+                    to model wind speed.
+                    Inputs the theta, horizontal power direction component,
+                    to model wind direction. This isnt really a useful metric.
                     Multi Output model.
                 
                     Parameters:
@@ -4579,7 +4583,7 @@ class Seismic:
 
                         # Polar coords
                         r = np.sqrt(EW_power**2 + NS_power**2 + Z_power**2)
-                        theta = np.arctan2(NS_power, EW_power)  
+                        theta = np.arctan2(NS_power, EW_power)  # Horizontal Power Orientation
                         # Phi not needed here. AWS doesnt capture phi
 
                         # Wrap Around Problem
@@ -4617,6 +4621,7 @@ class Seismic:
                             X_r = X_r[mask_aws]
                             X_theta_dir = X_theta_dir[mask_aws]
                             y_aws_dir = y_aws_dir[mask_aws]
+                            aws_values = aws_values[mask_aws]
 
                         # Wind Speed Model
                         X_r_train, X_r_test, y_aws_values_train, y_aws_values_test = train_test_split(X_r, aws_values, test_size=0.2, random_state=42)

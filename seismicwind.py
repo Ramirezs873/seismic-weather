@@ -1387,15 +1387,26 @@ class Seismic:
                     EW_p = np.abs(y_EW)**2
                     NS_p = np.abs(y_NS)**2
                     Z_p = np.abs(y_Z)**2
+
+                    # Phases
+                    EW_angle = np.angle(y_EW)
+                    NS_angle = np.angle(y_NS)
+                    Z_angle = np.angle(y_Z)
+                    relative_phase = np.angle(y_NS * np.conj(y_EW))
+
             
                     # Save spectra as a dictionary
                     spectra.append({'freq': freq,
                                     'EW': EW_p,
                                     'NS': NS_p,
                                     'Z': Z_p,
+                                    'EW_angle': EW_angle,
+                                    'NS_angle': NS_angle,
+                                    'Z_angle': Z_angle,
+                                    'relative_phase': relative_phase,
                                     'time' : aws_times,
                                     'aws_values' : self.wd[1],
-                                    'wind_direction' : self.wd[2]})
+                                    'wind_direction' : self.wd[2]},)
             
                     all_spectra.append({station: spectra})
                     self.fft = all_spectra 
@@ -4580,10 +4591,12 @@ class Seismic:
                         freq = station_dict[station][0]['freq']
                         aws_values = station_dict[station][0]['aws_values']
                         wind_direction = station_dict[station][0]['wind_direction']
+                        relative_phase = station_dict[station][0]['relative_phase']
 
                         # Polar coords
                         r = np.sqrt(EW_power**2 + NS_power**2 + Z_power**2)
-                        theta = np.arctan2(NS_power, EW_power)  # Horizontal Power Orientation
+                        #theta = np.arctan2(NS_power, EW_power)  # Horizontal Power Orientation
+                        theta = relative_phase # Relative horizontal signal phase
                         # Phi not needed here. AWS doesnt capture phi
 
                         # Wrap Around Problem

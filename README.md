@@ -147,5 +147,6 @@ The `config.yml` file contains paths to local directories
 ```
 name: Windy 
 aws_dir: .../path/to/aws/data/
-seis_dir: .../path/to/seismic/data/
+seismic_data_path: .../path/to/seismic/data/
+seiswind_module: .../path/to/seismicwind.py
 ```

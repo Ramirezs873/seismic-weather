@@ -1008,7 +1008,7 @@ class Seismic:
 
 
         def get_var(self,
-                    variable='Wind speed in km/hr',
+                    variable='Wind speed in km/h',
                     year=None, 
                     month=None, 
                     day=None,
@@ -1420,7 +1420,17 @@ class Seismic:
 
                 def __init__(self, seismic_wind):
                     self.seismic_wind = seismic_wind
-
+                    self.n_estimators = None
+                    self.max_depth = None
+                    self.min_samples_split = None
+                    self.min_samples_leaf = None
+                    self.max_features = None
+                    self.C = None
+                    self.gamma = None
+                    self.epsilon = None
+                    self.alpha_EN = None
+                    self.l1_ratio = None
+                    self.alpha_Ridge = None
 
                 # Optimisation
                 def optimise_ridge(self,
@@ -1520,6 +1530,9 @@ class Seismic:
                         print("Cos2 alpha:", cos_ridge.named_steps['ridge'].alpha_,
                                 "CV R²:", cos_ridge.named_steps['ridge'].best_score_)
 
+                        # Needs tobe reworked to work for multiple stations in dict.
+                        self.alpha_Ridge = var_ridge.named_steps['ridge'].alpha_
+                        return self.alpha_Ridge
 
                 def optimise_EN(self,
                                 fmin = 1,
@@ -1643,6 +1656,12 @@ class Seismic:
                         print("Cos2 alpha:", cos_alpha,
                                 "Cos2 l1_ratio:", cos_l1,
                                 "Cos2 CV R²:", cos_scores.mean(), "+/-", cos_scores.std())
+
+                        # Needs to be reworked for multuiple stations
+                        self.alpha_EN = var_alpha
+                        self.l1_ratio = var_l1
+
+                        return self.alpha_EN, self.l1_ratio
 
                 def optimise_SVR(self,
                                 fmin = 1,
@@ -1783,6 +1802,13 @@ class Seismic:
                         print("gamma:", best_cos_params[1])
                         print("epsilon:", best_cos_params[2])
                         print("CV R²:", best_cos_r2)
+
+                        # needs to be reworked for all stations in dict    
+                        self.C = best_var_params[0]
+                        self.gamma = best_var_params[1]
+                        self.epsilon = best_var_params[2]
+
+                        return self.C, self.gamma, self.epsilon
 
                 def optimise_RF(self,
                                 fmin = 1,
@@ -1946,6 +1972,15 @@ class Seismic:
                                 print("max_features:", best_cos_params[4])
                                 print("CV R²:", best_cos_r2)
 
+                            # This needs to be reworked to fit multiple station dictionary
+                            self.n_estimators = best_var_params[0]
+                            self.max_depth = best_var_params[1]
+                            self.min_samples_split = best_var_params[2]
+                            self.min_samples_leaf = best_var_params[3]
+                            self.max_features = best_var_params[4]
+
+                            return self.n_estimators, self.max_depth, self.min_samples_split, self.min_samples_leaf, self.max_features
+
                 # Model Analysis
                 def RF(self,
                        fmin = 1,
@@ -1959,7 +1994,12 @@ class Seismic:
                        plot_results = True,
                        plot_residuals = True,
                        plot_power_aws = True,
-                       variable_name = 'AWS Wind Speed (km/hr)'):
+                       variable_name = 'AWS Wind Speed (km/hr)',
+                       n_estimators = None,
+                       max_depth = None,
+                       min_samples_split = None,
+                       min_samples_leaf = None,
+                       max_features = None):
                     
                     """
                     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -1998,6 +2038,18 @@ class Seismic:
                                 A list of dictionaries containing information about all the correlation results for each station.
                         """
                         
+                    # Setup Model Parameters
+                    if n_estimators is None:
+                        n_estimators = self.n_estimators
+                    if max_depth is None:
+                        max_depth = self.max_depth
+                    if min_samples_split is None:
+                        min_samples_split = self.min_samples_split
+                    if min_samples_leaf is None:
+                        min_samples_leaf = self.min_samples_leaf
+                    if max_features is None:
+                        max_features = self.max_features
+
                     # Setup Result Lists
                     results = []
                 
@@ -2067,9 +2119,18 @@ class Seismic:
                         X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
                 
                         # Define Random Forest Models
-                        var_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
-                        sin_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
-                        cos_model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=1)
+                        var_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
+                                                          min_samples_split=min_samples_split,
+                                                          min_samples_leaf=min_samples_leaf,
+                                                          max_features=max_features, random_state=42, n_jobs=1)
+                        sin_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
+                                                          min_samples_split=min_samples_split,
+                                                          min_samples_leaf=min_samples_leaf,
+                                                          max_features=max_features, random_state=42, n_jobs=1)
+                        cos_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
+                                                          min_samples_split=min_samples_split,
+                                                          min_samples_leaf=min_samples_leaf,
+                                                          max_features=max_features, random_state=42, n_jobs=1)
                 
                         # Cross Validation
                         cv = KFold(n_splits=5, shuffle=True, random_state=42)
@@ -2530,7 +2591,10 @@ class Seismic:
                         plot_results = True,
                         plot_residuals = True,
                         plot_power_aws = True,
-                        variable_name = 'AWS Wind Speed (km/hr)'):
+                        variable_name = 'AWS Wind Speed (km/hr)',
+                        C = None,
+                        gamma = None,
+                        epsilon = None):
 
                     """
                         Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -2571,6 +2635,15 @@ class Seismic:
                             results (list):
                                 A list of dictionaries containing information about all the correlation results for each station.
                         """
+
+                    # Setup Model Parameters
+                    if C is None:
+                        C = self.C
+                    if gamma is None:
+                        gamma = self.gamma
+                    if epsilon is None:
+                        epsilon = self.epsilon
+                    
                         
                     # Setup Result Lists
                     results = []
@@ -2643,9 +2716,9 @@ class Seismic:
                         # Pipeline
                         # Scale, SVR
                         # (Need to find optimal values)
-                        var_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=1.0, epsilon=0.2))])
-                        sin_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=1.0, epsilon=0.2))])
-                        cos_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=1.0, epsilon=0.2))])
+                        var_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma=gamma, epsilon=epsilon))])
+                        sin_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma=gamma, epsilon=epsilon))])
+                        cos_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma=gamma, epsilon=epsilon))])
                 
                         # Cross Validation
                         cv = KFold(n_splits=5, shuffle=True, random_state=42)
@@ -3107,7 +3180,9 @@ class Seismic:
                        plot_results = True,
                        plot_residuals = True,
                        plot_power_aws = True,
-                       variable_name = 'AWS Wind Speed (km/hr)'):
+                       variable_name = 'AWS Wind Speed (km/hr)',
+                       alpha_EN = None,
+                       l1_ratio = None):
                     
                     """
                     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -3148,7 +3223,13 @@ class Seismic:
                         results (list):
                             A list of dictionaries containing information about all the correlation results for each station.
                     """
-                    
+
+                    # Setup Model Parameters
+                    if alpha_EN is None:
+                        alpha_EN = self.alpha_EN
+                    if l1_ratio is None:
+                        l1_ratio = self.l1_ratio
+
                     # Setup Result Lists
                     results = []
                 
@@ -3219,9 +3300,9 @@ class Seismic:
                 
                         # Pipeline
                         # Scale, ElasticNet (Need to find optimal l1 still)
-                        var_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=0.08, l1_ratio=0.5))])
-                        sin_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=0.08, l1_ratio=0.5))])
-                        cos_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=0.08, l1_ratio=0.5))])
+                        var_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio))])
+                        sin_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio))])
+                        cos_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio))])
                 
                         # Cross Validation
                         cv = KFold(n_splits=5, shuffle=True, random_state=42)
@@ -3685,7 +3766,8 @@ class Seismic:
                           plot_results = True,
                           plot_residuals = True,
                           plot_power_aws = True,
-                          variable_name = 'AWS Wind Speed (km/hr)'):
+                          variable_name = 'AWS Wind Speed (km/hr)',
+                          alpha_Ridge = None):
 
                     """
                     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -3726,7 +3808,11 @@ class Seismic:
                         results (list):
                             A list of dictionaries containing information about all the correlation results for each station.
                     """
-                    
+
+                    # Setup Model Parameters
+                    if alpha_Ridge is None:
+                        alpha_Ridge = self.alpha_Ridge
+
                     # Setup Result Lists
                     results = []
                 
@@ -3797,9 +3883,9 @@ class Seismic:
                 
                         # Pipeline
                         # Scale, Ridge # need to optimise alpha
-                        var_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=0.08))])
-                        sin_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=0.08))])
-                        cos_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=0.08))])
+                        var_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
+                        sin_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
+                        cos_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
                 
                         # Cross Validation
                         cv = KFold(n_splits=5, shuffle=True, random_state=42)

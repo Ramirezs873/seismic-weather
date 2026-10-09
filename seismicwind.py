@@ -41,6 +41,9 @@ class Seismic:
         # Seismic Data
         self.st = None
 
+        # Reference Seismic Data
+        self.ref = None
+
         # Preprocess data
         self.preprocess = self.Preprocess(self)
 
@@ -156,6 +159,107 @@ class Seismic:
 
         return self
 
+    def get_ref_seis(self, 
+                    client,
+                    network,
+                    station,
+                    location,
+                    channel,
+                    t_start,
+                    t_end,
+                    username = None,
+                    password = None,
+                    file_name = None):
+            """
+            Gather reference seismic waveform data from a FDSN client,
+            or from a local file if the file name already exists
+            in the directory. 
+    
+            Parameters:
+                client (str):
+                    FDSN client name. e.g 'IRIS', 'AUSPASS'.
+                network (str):
+                    Network code. e.g 'IU', 'AU'.
+                station (str):
+                    Station code. e.g. 'CASY', 'CWA86'.
+                location (str):
+                    Location code. e.g '00', '10'.
+                    Use '*' for all locations.
+                channel (str):
+                    Channel code. e.g 'BH1', 'NHE'.
+                    Use '?' for all types of partly specified channel. 
+                    Use '*' for all channels.
+                t_start (UTCDateTime): 
+                    Start time for data retrieval.
+                t_end (UTCDateTime): 
+                    End time for data retrieval.
+                username (str):
+                    Username to access data (if required).
+                password (str):
+                    Password to access data (if required).
+                file_name (str):
+                    Filename to save the data as.
+                
+            Returns:
+                wave_dict (dict):
+                    Dictionary containing seismic waveform data.
+    
+            """
+    
+            # Check if file already exists
+            
+    
+            # Config Support
+            base_path = Path(self.config["seismic_data_path"]) if self.config else Path(".")
+            base_path.mkdir(parents=True, exist_ok=True)
+    
+            if file_name is None:
+                time = t_start.strftime("%Y-%m-%d") # Start date of data
+                filename = f"{network}_{station}_{time}"
+            else:
+                filename = file_name
+    
+            file_path = (base_path / filename).with_suffix(".mseed")
+    
+            if file_path.exists():
+                print(f"Reading existing file: {file_path}")
+                station_data = read(str(file_path))
+    
+            else:
+                print("File not found. Downloading data")
+        
+                # Gather data from target stations
+                g = Client(base_url=client, 
+                            user=username, 
+                            password=password) # FDSN client 
+    
+                # Gather waveform data
+                station_data = g.get_waveforms(network=network, 
+                                                station=station, 
+                                                location=location, 
+                                                channel=channel, 
+                                                starttime=t_start, 
+                                                endtime=t_end) 
+    
+                # Write to file
+                station_data.write(str(file_path), format = 'MSEED')
+                print(f"Saved to: {file_path}")
+            
+            # Write to a dictionary
+            wave_dict = defaultdict(list) 
+        
+            for tr in station_data:
+                station = (
+                f"{tr.stats.network}."
+                f"{tr.stats.station}."
+                f"{tr.stats.location}"
+                )
+                wave_dict[station].append(tr) 
+    
+            self.ref = wave_dict
+    
+            return self
+
     # Helper Functions
 
     @staticmethod 
@@ -224,6 +328,26 @@ class Seismic:
             base_path.mkdir(parents=True, exist_ok=True)
             file_path = (base_path / file_name).with_suffix(".mseed")
 
+            # Process reference data if available
+            if self.seismic.ref is not None:
+                # Establish timespan
+                t_end = t_start + duration
+                streams = []
+
+                # Wave_dict
+                ref_dict = self.seismic.ref
+
+                # Trim to desired timespan and write to a direction
+                new_dict = defaultdict(list)
+                for station_name in ref_dict:
+                    st = Stream(ref_dict[station_name]).copy() # Copy to avoid overwriting data
+                    st.trim(starttime=t_start, endtime=t_end, pad=False)
+                    streams.append(st)
+                    new_dict[station_name].extend(st.traces)
+                # Rewrite self.ref
+                self.seismic.ref = new_dict
+                        
+
             # Read file if it exists
             if file_path.exists():
                 print(f"Reading existing file: {file_path}")
@@ -234,8 +358,6 @@ class Seismic:
 
                 # Rewrite self.st
                 self.seismic.st = new_dict
-
-                return self.seismic.st
             
             else:
                 # Establish timespan
@@ -291,6 +413,23 @@ class Seismic:
             base_path = Path(self.seismic.config["seismic_data_path"]) if self.seismic.config else Path(".")
             base_path.mkdir(parents=True, exist_ok=True)
             file_path = (base_path / file_name).with_suffix(".mseed")
+
+            # Process reference data if available
+            if self.seismic.ref is not None:
+                # Wave_dict
+                ref_dict = self.seismic.ref
+
+                # Demean and detrend the data and write to a dictionary
+                new_dict = defaultdict(list)
+                streams = []
+        
+                for station_name, traces in ref_dict.items():  
+                    st = Stream(traces).copy() # Copy to avoid overwriting data
+                    st.detrend("demean")
+                    streams.append(st)
+                    new_dict[station_name].extend(st.traces)
+                # Rewrite self.ref
+                self.seismic.ref = new_dict
 
             # Read file if it exists
             if file_path.exists():
@@ -356,6 +495,23 @@ class Seismic:
             base_path = Path(self.seismic.config["seismic_data_path"]) if self.seismic.config else Path(".")
             base_path.mkdir(parents=True, exist_ok=True)
             file_path = (base_path / file_name).with_suffix(".mseed")
+
+            # Process reference data if available
+            if self.seismic.ref is not None:
+                # Wave_dict
+                ref_dict = self.seismic.ref
+
+                # Demean and detrend the data and write to a dictionary
+                new_dict = defaultdict(list)
+                streams = []
+        
+                for station_name, traces in ref_dict.items():  
+                    st = Stream(traces).copy() # Copy to avoid overwriting data
+                    st.detrend("linear")
+                    streams.append(st)
+                    new_dict[station_name].extend(st.traces)
+                # Rewrite self.ref
+                self.seismic.ref = new_dict
 
             # Read file if it exists
             if file_path.exists():
@@ -433,6 +589,23 @@ class Seismic:
             base_path = Path(self.seismic.config["seismic_data_path"]) if self.seismic.config else Path(".")
             base_path.mkdir(parents=True, exist_ok=True)
             file_path = (base_path / file_name).with_suffix(".mseed")
+
+            # Process reference data if available
+            if self.seismic.ref is not None:
+                # Wave_dict
+                ref_dict = self.seismic.ref
+
+                # Apply the window function and write to a dictionary
+                new_dict = defaultdict(list)
+                streams = []
+                for station_name, traces in ref_dict.items():  
+                    st = Stream(traces).copy() # Copy to avoid overwriting data
+                    
+                    st.taper(type=type, max_percentage=max_percentage, max_length=max_length, side=side)
+                    streams.append(st)
+                    new_dict[station_name].extend(st)
+
+                self.seismic.ref = new_dict
 
             # Read file if it exists
             if file_path.exists():
@@ -517,6 +690,39 @@ class Seismic:
             base_path.mkdir(parents=True, exist_ok=True)
             file_path = (base_path / file_name).with_suffix(".mseed")
 
+            # Process reference data if available
+            if self.seismic.ref is not None:
+                # Wave_dict
+                ref_dict = self.seismic.ref
+
+                # Setup dictionary
+                filtered_ref = defaultdict(list)
+                streams = []
+                # Loop through and apply filter to the traces
+                for station_name, traces in ref_dict.items():
+                    st = Stream([tr.copy() for tr in traces]) # Copy to avoid overwriting data
+        
+                    if filter_type in ('bandpass', 'bandstop'):
+                        st.filter(type=filter_type, 
+                                freqmin=freqmin, 
+                                freqmax=freqmax, 
+                                corners=corners, 
+                                zerophase=zerophase)
+                        streams.append(st)
+        
+                    elif filter_type in ('lowpass', 'highpass'): 
+                        st.filter(type=filter_type, 
+                                freq=freq, 
+                                corners=corners, 
+                                zerophase=zerophase)
+                        streams.append(st)
+        
+                    else:
+                        raise ValueError(f"Unsupported filter type: {filter_type}") #'lowpass_cheby_2', 'lowpass_fir', 'remez_fir' currently not setup
+        
+                    filtered_ref[station_name] = st.traces # Write to a dictionary
+                self.seismic.ref = filtered_ref
+                
             # Read file if it exists
             if file_path.exists():
                 print(f"Reading existing file: {file_path}")
@@ -632,6 +838,66 @@ class Seismic:
             base_path.mkdir(parents=True, exist_ok=True)
             file_path = (base_path / file_name).with_suffix(".mseed")
 
+            # Process reference data if available
+            if self.seismic.ref is not None:
+                # Wave_dict
+                ref_dict = self.seismic.ref
+
+                station_list = list(ref_dict.keys())
+                amplitude_corrected_obspy = defaultdict(list) 
+                streams = []
+        
+                for (stat, stream, NS_correct, EW_correct, Z_correct) in zip(station_list, 
+                                                                            ref_dict.values(), 
+                                                                            NS_correction_factor, 
+                                                                            EW_correction_factor, 
+                                                                            Z_correction_factor):
+                    print(f"Processing {stat}...")
+        
+                    st = Stream(stream)
+                    st.sort(['channel'])
+                    NS = self.seismic.find_channel(st, NS_channel) 
+                    EW = self.seismic.find_channel(st, EW_channel) 
+                    Z = self.seismic.find_channel(st, Z_channel)
+        
+                    t_start = min(tr.stats.starttime for tr in st)
+                    fs = st[0].stats.sampling_rate
+        
+                    # Adjust for Sensitivity, Convert to m/s
+                    NS_v = NS[0].data / sensitivity
+                    EW_v = EW[0].data / sensitivity
+                    Z_v = Z[0].data / sensitivity
+        
+                    NS_corrected = NS_v * NS_correct if NS else None
+                    EW_corrected = EW_v * EW_correct if EW else None
+                    Z_corrected = Z_v * Z_correct if Z else None
+        
+                    # Create new obspy stream with aligned data
+                    st = Stream()
+                    NS_name = NS[0].stats.channel if NS else None
+                    EW_name = EW[0].stats.channel if EW else None
+                    Z_name  = Z[0].stats.channel if Z else None
+                    network_name = ref_dict[stat][0].stats.network 
+                    station_name = ref_dict[stat][0].stats.station
+        
+                    
+                    components = {EW_name: EW_corrected, NS_name: NS_corrected, Z_name: Z_corrected}
+                    if NS_name is None or EW_name is None or Z_name is None:
+                        print(f"Skipping {stat}. Missing channel")
+                        continue
+        
+                    for channel, data in components.items():
+                        tr = Trace(data=data)
+                        tr.stats.network = network_name
+                        tr.stats.station = station_name
+                        tr.stats.channel = channel
+                        tr.stats.starttime = UTC(t_start)
+                        tr.stats.sampling_rate = fs
+                        st.append(tr)
+                    streams.append(st)
+                    amplitude_corrected_obspy[stat] = st
+                self.seismic.ref = amplitude_corrected_obspy
+                
             # Read file if it exists
             if file_path.exists():
                 print(f"Reading existing file: {file_path}")
@@ -912,6 +1178,16 @@ class Seismic:
                 st = Stream(wave_dict[station_name])
                 print(f"Plotting {station_name}")
                 st.plot(color=color)
+
+            # Plot ref station if possible
+            if self.seismic.ref is not None:
+                for station_name in self.seismic.ref:
+                    if not self.seismic.ref[station_name]:    # Skip empty stations
+                        print(f"Skipping empty ref station: {station_name}")
+                        continue
+                    st = Stream(self.seismic.ref[station_name])
+                    print(f"Plotting ref station {station_name}")
+                    st.plot(color=color)
             
 
         # Create PPSD Plots

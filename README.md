@@ -18,8 +18,8 @@ Investigate near sensor seismic weather signals alongside AWS data.
    * Plot AWS Variable Time Series
    * Plot Wind Speed and Wind Direction
    * Seismic FFT (with AWS Time Matchup)
+   * Determine Seismic Station Orientation
    * Create Seismic PPSDs (Implemented Soon)
-   * Determine Seismic Station Orientation (Implemented Soon)
    * Inspect Broad Seismic Event Information for Stations (Implemented Soon)
    * Inspect Station Data and Inventory Creation (Implemented Soon)
 * Determine Wind Speed and Seismic Power Relationship 
@@ -59,6 +59,9 @@ class Seismic:
    # Retrieve Seismic Data
    def get_seis():
 
+  # Retrieve a Reference Seismic Dataset
+  def get_ref_seis():
+
    # Seismic Preprocessing
    class Preprocess:
 
@@ -89,6 +92,12 @@ class Seismic:
       # Plot Seismic Waveforms
       def plot_streams():
 
+      # Apply Cross Correlation to Determine Relative Orientation Between Target and Reference Seismic Stations and Plot
+      def cc_correction():
+
+      # Apply Cross Correlation and Tabulate Results
+      def cc_table():
+
       # More to be added soon
 
    # Wind Analysis
@@ -115,21 +124,24 @@ class Seismic:
          # Regression Models
          class Models:
 
-         # Optimise Models
-         def optimise_ridge():
-         def optimise_EN():
-         def optimise_SVR():
-         def optimise_RF():
+           # Optimise Models
+           def optimise_ridge():
+           def optimise_EN():
+           def optimise_SVR():
+           def optimise_RF():
+  
+           # Model Analysis
+           def Ridge():
+           def EN():
+           def SVR():
+           def RF():
+  
+           # Compare Models
+           def compare_models():
 
-         # Model Analysis
-         def Ridge():
-         def EN():
-         def SVR():
-         def RF():
-
-         # Compare Models
-         def compare_models():
-         
+          # Experimental Ridge model input. Seismic Power is transformed into Polar Coordinates. WIP
+          def polar_Ridge():
+           
 ```
 
 ### Data formats

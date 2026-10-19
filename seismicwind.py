@@ -2100,7 +2100,8 @@ class Seismic:
                                    f_band_width = 1,
                                    step_size = 1,
                                    n_splits = 5,
-                                   min_WS = None):
+                                   min_WS = None,
+                                   WS_only = True):
                     # Bands
                     # Create Bandwidths
                     bands = []
@@ -2175,21 +2176,24 @@ class Seismic:
                         # Pipeline
                         # Scale, RidgeCV 
                         var_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
-                        sin_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
-                        cos_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
+                        if WS_only == False:
+                            sin_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
+                            cos_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
                 
                         var_ridge.fit(X_all_train, y_all_train[:, 0])
-                        sin_ridge.fit(X_all_train, y_all_train[:, 1])
-                        cos_ridge.fit(X_all_train, y_all_train[:, 2])
+                        if WS_only == False:
+                            sin_ridge.fit(X_all_train, y_all_train[:, 1])
+                            cos_ridge.fit(X_all_train, y_all_train[:, 2])
                 
                         print("WS alpha:", var_ridge.named_steps['ridge'].alpha_,
                                 "CV R²:", var_ridge.named_steps['ridge'].best_score_)
                         print("--------------------------------------------------")
-                        print("Sin2 alpha:", sin_ridge.named_steps['ridge'].alpha_,
-                                "CV R²:", sin_ridge.named_steps['ridge'].best_score_)
-                        print("--------------------------------------------------")
-                        print("Cos2 alpha:", cos_ridge.named_steps['ridge'].alpha_,
-                                "CV R²:", cos_ridge.named_steps['ridge'].best_score_)
+                        if WS_only == False:
+                            print("Sin2 alpha:", sin_ridge.named_steps['ridge'].alpha_,
+                                    "CV R²:", sin_ridge.named_steps['ridge'].best_score_)
+                            print("--------------------------------------------------")
+                            print("Cos2 alpha:", cos_ridge.named_steps['ridge'].alpha_,
+                                    "CV R²:", cos_ridge.named_steps['ridge'].best_score_)
 
                         # Needs tobe reworked to work for multiple stations in dict.
                         self.alpha_Ridge = var_ridge.named_steps['ridge'].alpha_
@@ -2201,7 +2205,8 @@ class Seismic:
                                 f_band_width = 1,
                                 step_size = 1,
                                 n_splits = 5,
-                                min_WS = None):
+                                min_WS = None,
+                                WS_only = True):
                     
                     # Bands
                     # Create Bandwidths
@@ -2210,8 +2215,7 @@ class Seismic:
                         f2 = f1 + f_band_width
                         band = (f1, f2)
                         bands.append(band)
-                    # Num of Bands
-                    n_bands = len(bands)
+
                     # Create Band Centers
                     band_centres = []
                     for f1, f2 in bands:
@@ -2278,45 +2282,51 @@ class Seismic:
                         # Pipeline
                         # Scale, ElasticNet 
                         var_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=2000))])
-                        sin_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=2000))])
-                        cos_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=2000))])
-                
+                        if WS_only == False:
+                            sin_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=2000))])
+                            cos_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=2000))])
+                    
                         var_EN.fit(X_all_train, y_all_train[:, 0])
-                        sin_EN.fit(X_all_train, y_all_train[:, 1])
-                        cos_EN.fit(X_all_train, y_all_train[:, 2])
+                        if WS_only == False:
+                            sin_EN.fit(X_all_train, y_all_train[:, 1])
+                            cos_EN.fit(X_all_train, y_all_train[:, 2])
                 
                         # Get optimised values
                         var_alpha = var_EN.named_steps['enet'].alpha_
                         var_l1 = var_EN.named_steps['enet'].l1_ratio_
-                
-                        sin_alpha = sin_EN.named_steps['enet'].alpha_
-                        sin_l1 = sin_EN.named_steps['enet'].l1_ratio_
-                
-                        cos_alpha = cos_EN.named_steps['enet'].alpha_
-                        cos_l1 = cos_EN.named_steps['enet'].l1_ratio_
+
+                        if WS_only == False:
+                            sin_alpha = sin_EN.named_steps['enet'].alpha_
+                            sin_l1 = sin_EN.named_steps['enet'].l1_ratio_
+                    
+                            cos_alpha = cos_EN.named_steps['enet'].alpha_
+                            cos_l1 = cos_EN.named_steps['enet'].l1_ratio_
                 
                         # Find CV R2 for these params
                         var_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=var_alpha, l1_ratio=var_l1, max_iter=2000))])
-                        sin_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=sin_alpha, l1_ratio=sin_l1, max_iter=2000))])
-                        cos_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=cos_alpha, l1_ratio=cos_l1, max_iter=2000))])      
+                        if WS_only == False:
+                            sin_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=sin_alpha, l1_ratio=sin_l1, max_iter=2000))])
+                            cos_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=cos_alpha, l1_ratio=cos_l1, max_iter=2000))])      
                 
                         # Cross Validation
                         var_scores = cross_val_score(var_EN_best, X_all_train, y_all_train[:, 0], cv=cv, scoring='r2')
-                        sin_scores = cross_val_score(sin_EN_best, X_all_train, y_all_train[:, 1], cv=cv, scoring='r2')
-                        cos_scores = cross_val_score(cos_EN_best, X_all_train, y_all_train[:, 2], cv=cv, scoring='r2')
+                        if WS_only == False:
+                            sin_scores = cross_val_score(sin_EN_best, X_all_train, y_all_train[:, 1], cv=cv, scoring='r2')
+                            cos_scores = cross_val_score(cos_EN_best, X_all_train, y_all_train[:, 2], cv=cv, scoring='r2')
                 
                         # Print results
                         print("WS alpha:", var_alpha,
                                 "WS l1_ratio:", var_l1,
                                 "WS CV R²:", var_scores.mean(), "+/-", var_scores.std())
                         print("--------------------------------------------------")
-                        print("Sin2 alpha:", sin_alpha,
-                                "Sin2 l1_ratio:", sin_l1,
-                                "Sin2 CV R²:", sin_scores.mean(), "+/-", sin_scores.std())
-                        print("--------------------------------------------------")
-                        print("Cos2 alpha:", cos_alpha,
-                                "Cos2 l1_ratio:", cos_l1,
-                                "Cos2 CV R²:", cos_scores.mean(), "+/-", cos_scores.std())
+                        if WS_only == False:
+                            print("Sin2 alpha:", sin_alpha,
+                                    "Sin2 l1_ratio:", sin_l1,
+                                    "Sin2 CV R²:", sin_scores.mean(), "+/-", sin_scores.std())
+                            print("--------------------------------------------------")
+                            print("Cos2 alpha:", cos_alpha,
+                                    "Cos2 l1_ratio:", cos_l1,
+                                    "Cos2 CV R²:", cos_scores.mean(), "+/-", cos_scores.std())
 
                         # Needs to be reworked for multuiple stations
                         self.alpha_EN = var_alpha
@@ -2330,7 +2340,8 @@ class Seismic:
                                 f_band_width = 1,
                                 step_size = 1,
                                 n_splits = 5,
-                                min_WS = None):
+                                min_WS = None,
+                                WS_only = True):
                     # Bands
                     # Create Bandwidths
                     bands = []
@@ -2414,18 +2425,21 @@ class Seismic:
                                     # Pipeline
                                     # Scale, SVR
                                     var_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
-                                    sin_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
-                                    cos_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
-                
+                                    if WS_only == False:
+                                        sin_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
+                                        cos_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
+                    
                                     # Cross Validate
                                     var_score = cross_val_score(var_svr, X_all_train, y_all_train[:, 0], cv=cv, scoring ='r2', n_jobs=-1)
-                                    sin_score = cross_val_score(sin_svr, X_all_train, y_all_train[:, 1], cv=cv, scoring ='r2', n_jobs=-1)
-                                    cos_score = cross_val_score(cos_svr, X_all_train, y_all_train[:, 2], cv=cv, scoring ='r2', n_jobs=-1)
-                        
+                                    if WS_only == False:
+                                        sin_score = cross_val_score(sin_svr, X_all_train, y_all_train[:, 1], cv=cv, scoring ='r2', n_jobs=-1)
+                                        cos_score = cross_val_score(cos_svr, X_all_train, y_all_train[:, 2], cv=cv, scoring ='r2', n_jobs=-1)
+                            
                                     # CV R2
                                     var_mean_r2 = var_score.mean()
-                                    sin_mean_r2 = sin_score.mean()
-                                    cos_mean_r2 = cos_score.mean()
+                                    if WS_only == False:
+                                        sin_mean_r2 = sin_score.mean()
+                                        cos_mean_r2 = cos_score.mean()
                 
                                     # Note Parameters
                                     params = [c, g, e]
@@ -2435,16 +2449,17 @@ class Seismic:
                                     if var_mean_r2 > best_var_r2:
                                         best_var_r2 = var_mean_r2
                                         best_var_params = params.copy()
-                
-                                    # Save best sin2 model
-                                    if sin_mean_r2 > best_sin_r2:
-                                        best_sin_r2 = sin_mean_r2
-                                        best_sin_params = params.copy()
-                
-                                    # Save best cos2 model
-                                    if cos_mean_r2 > best_cos_r2:
-                                        best_cos_r2 = cos_mean_r2
-                                        best_cos_params = params.copy()
+
+                                    if WS_only == False:
+                                        # Save best sin2 model
+                                        if sin_mean_r2 > best_sin_r2:
+                                            best_sin_r2 = sin_mean_r2
+                                            best_sin_params = params.copy()
+                    
+                                        # Save best cos2 model
+                                        if cos_mean_r2 > best_cos_r2:
+                                            best_cos_r2 = cos_mean_r2
+                                            best_cos_params = params.copy()
                 
                         print("WS:")
                         print("C:", best_var_params[0])
@@ -2452,17 +2467,18 @@ class Seismic:
                         print("epsilon:", best_var_params[2])
                         print("CV R²:", best_var_r2)
                         print("--------------------------------------------------")
-                        print("Sin2:")
-                        print("C:", best_sin_params[0])
-                        print("gamma:", best_sin_params[1])
-                        print("epsilon:", best_sin_params[2])
-                        print("CV R²:", best_sin_r2)
-                        print("--------------------------------------------------")
-                        print("Cos2:")
-                        print("C:", best_cos_params[0])
-                        print("gamma:", best_cos_params[1])
-                        print("epsilon:", best_cos_params[2])
-                        print("CV R²:", best_cos_r2)
+                        if WS_only == False:
+                            print("Sin2:")
+                            print("C:", best_sin_params[0])
+                            print("gamma:", best_sin_params[1])
+                            print("epsilon:", best_sin_params[2])
+                            print("CV R²:", best_sin_r2)
+                            print("--------------------------------------------------")
+                            print("Cos2:")
+                            print("C:", best_cos_params[0])
+                            print("gamma:", best_cos_params[1])
+                            print("epsilon:", best_cos_params[2])
+                            print("CV R²:", best_cos_r2)
 
                         # needs to be reworked for all stations in dict    
                         self.C = best_var_params[0]

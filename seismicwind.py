@@ -27,6 +27,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.inspection import permutation_importance
 from sklearn.linear_model import RidgeCV
 from sklearn.linear_model import ElasticNetCV
+from sklearn.model_selection import RandomizedSearchCV
 import matplotlib
 from obspy.clients.fdsn import Client
 
@@ -2493,8 +2494,7 @@ class Seismic:
                                 f_band_width = 1,
                                 step_size = 1,
                                 n_splits = 5,
-                                min_WS = None,
-                                WS_only = True):
+                                min_WS = None):
                     
                         # Bands
                         # Create Bandwidths
@@ -2561,100 +2561,44 @@ class Seismic:
                             X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
                     
                             # Find best paramters
-                            # setup parameter lists
-                            n_estimators = [50, 100, 150, 200]
-                            depths = [5, 10, 15, None]
-                            min_samp_split = [2, 5, 10]
-                            min_samp_leaf = [1, 3, 5]
-                            max_feat = [0.25, 0.5, 0.75, 1.0]
-                    
-                            best_var_r2 = -np.inf
-                            if WS_only == False:
-                                best_sin_r2 = -np.inf
-                                best_cos_r2 = -np.inf
+                            # setup parameter grid
+                            param_grid = {'n_estimators': [50, 100, 150, 200],
+                                            'max_depth': [5, 10, 15, None],
+                                            'min_samples_split': [2, 5, 10],
+                                            'min_samples_leaf': [1, 3, 5],
+                                            'max_features': [0.5, 0.75, 1.0]}
+
                     
                             cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-                    
-                            for n_est in n_estimators:
-                                for d in depths:
-                                    for min_split in min_samp_split:
-                                        for min_leaf in min_samp_leaf:
-                                            for feat in max_feat:
-                                                # Random Forest
-                                                var_rf = RandomForestRegressor(n_estimators=n_est, max_depth=d,
-                                                                               min_samples_split=min_split,min_samples_leaf=min_leaf,
-                                                                               max_features=feat, random_state=42, n_jobs=-1)
-                                                if WS_only == False:
-                                                    sin_rf = RandomForestRegressor(n_estimators=n_est, max_depth=d,
-                                                                                    min_samples_split=min_split,min_samples_leaf=min_leaf,
-                                                                                    max_features=feat, random_state=42, n_jobs=-1)
-                                                    cos_rf = RandomForestRegressor(n_estimators=n_est, max_depth=d,
-                                                                                    min_samples_split=min_split,min_samples_leaf=min_leaf,
-                                                                                    max_features=feat, random_state=42, n_jobs=-1)
-                    
-                                                # Cross Validate
-                                                var_score = cross_val_score(var_rf, X_all_train, y_all_train[:, 0], cv=cv, scoring ='r2', n_jobs=-1)
-                                                if WS_only == False:
-                                                    sin_score = cross_val_score(sin_rf, X_all_train, y_all_train[:, 1], cv=cv, scoring ='r2', n_jobs=-1)
-                                                    cos_score = cross_val_score(cos_rf, X_all_train, y_all_train[:, 2], cv=cv, scoring ='r2', n_jobs=-1)
-                                    
-                                                # CV R2
-                                                var_mean_r2 = var_score.mean()
-                                                if WS_only == False:
-                                                    sin_mean_r2 = sin_score.mean()
-                                                    cos_mean_r2 = cos_score.mean()
-                            
-                                                # Note Parameters
-                                                params = [n_est, d, min_split, min_leaf, feat]
-                            
-                                                # Is it better than previous iteration? If yes then save params
-                                                # Save best var model
-                                                if var_mean_r2 > best_var_r2:
-                                                    best_var_r2 = var_mean_r2
-                                                    best_var_params = params.copy()
-                    
-                                                if WS_only == False:
-                                                    # Save best sin2 model
-                                                    if sin_mean_r2 > best_sin_r2:
-                                                        best_sin_r2 = sin_mean_r2
-                                                        best_sin_params = params.copy()
-                                
-                                                    # Save best cos2 model
-                                                    if cos_mean_r2 > best_cos_r2:
-                                                        best_cos_r2 = cos_mean_r2
-                                                        best_cos_params = params.copy()
-                                        
-                    
+
+                            search = RandomizedSearchCV(RandomForestRegressor(random_state=42, n_jobs=1), 
+                                                        param_distributions = param_grid,
+                                                        n_iter = 40,
+                                                        scoring = 'r2',
+                                                        cv=cv,
+                                                        random_state=42,
+                                                        n_jobs=-1,
+                                                        refit=False)
+                            search.fit(X_all_train, y_all_train[:,0])
+
+                            best_var_params = search.best_params_
+                            best_var_r2 = search.best_score_
+                   
                             print("WS:")
-                            print("n_estimators:", best_var_params[0])
-                            print("depths:", best_var_params[1])
-                            print("min_sample_split:", best_var_params[2])
-                            print("min_sample_leaf:", best_var_params[3])
-                            print("max_features:", best_var_params[4])
+                            print("n_estimators:", best_var_params['n_estimators'])
+                            print("depths:", best_var_params['max_depth'])
+                            print("min_sample_split:", best_var_params['min_samples_split'])
+                            print("min_sample_leaf:", best_var_params['min_samples_leaf'])
+                            print("max_features:", best_var_params['max_features'])
                             print("CV R²:", best_var_r2)
-                            print("--------------------------------------------------")
-                            if WS_only == False:
-                                print("Sin2:")
-                                print("n_estimators:", best_sin_params[0])
-                                print("depths:", best_sin_params[1])
-                                print("min_sample_split:", best_sin_params[2])
-                                print("min_sample_leaf:", best_sin_params[3])
-                                print("max_features:", best_sin_params[4])
-                                print("CV R²:", best_sin_r2)
-                                print("--------------------------------------------------")
-                                print("n_estimators:", best_cos_params[0])
-                                print("depths:", best_cos_params[1])
-                                print("min_sample_split:", best_cos_params[2])
-                                print("min_sample_leaf:", best_cos_params[3])
-                                print("max_features:", best_cos_params[4])
-                                print("CV R²:", best_cos_r2)
+                            print("--------------------------------------------------") 
 
                             # This needs to be reworked to fit multiple station dictionary
-                            self.n_estimators = best_var_params[0]
-                            self.max_depth = best_var_params[1]
-                            self.min_samples_split = best_var_params[2]
-                            self.min_samples_leaf = best_var_params[3]
-                            self.max_features = best_var_params[4]
+                            self.n_estimators = best_var_params['n_estimators']
+                            self.max_depth = best_var_params['max_depth']
+                            self.min_samples_split = best_var_params['min_samples_split']
+                            self.min_samples_leaf = best_var_params['min_samples_leaf']
+                            self.max_features = best_var_params['max_features']
 
                             return self.n_estimators, self.max_depth, self.min_samples_split, self.min_samples_leaf, self.max_features
 
@@ -2800,16 +2744,16 @@ class Seismic:
                         var_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
                                                           min_samples_split=min_samples_split,
                                                           min_samples_leaf=min_samples_leaf,
-                                                          max_features=max_features, random_state=42, n_jobs=1)
+                                                          max_features=max_features, random_state=42, n_jobs=-1)
                         if WS_only == False:
                             sin_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
                                                             min_samples_split=min_samples_split,
                                                             min_samples_leaf=min_samples_leaf,
-                                                            max_features=max_features, random_state=42, n_jobs=1)
+                                                            max_features=max_features, random_state=42, n_jobs=-1)
                             cos_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
                                                             min_samples_split=min_samples_split,
                                                             min_samples_leaf=min_samples_leaf,
-                                                            max_features=max_features, random_state=42, n_jobs=1)
+                                                            max_features=max_features, random_state=42, n_jobs=-1)
                 
                         # Cross Validation
                         cv = KFold(n_splits=5, shuffle=True, random_state=42)

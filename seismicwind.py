@@ -2103,6 +2103,26 @@ class Seismic:
                                    n_splits = 5,
                                    min_WS = None,
                                    WS_only = True):
+
+                    """
+                    Optimises the ridge model parameters for best CV R2 from seismic spectra and aws inputs.
+
+                    Parameters:
+                        fmin (int):
+                            Minimum frequency value for calculating the power of each bandwidths.
+                        fmax (int):
+                            Maximum frequency value for calculating the power of each bandwidths.
+                        f_band_width (int):
+                            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+                        step_size (int):
+                            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+                        n_splits (int):
+                            Number of times to repeat the cross validation calculation
+                        min_WS (int):
+                            Minimum wind speed (km/hr) to be considered in analysis.
+                        WS_only (bool):
+                            True/False. False to consider speed and direction.
+                    """
                     # Bands
                     # Create Bandwidths
                     bands = []
@@ -2208,7 +2228,25 @@ class Seismic:
                                 n_splits = 5,
                                 min_WS = None,
                                 WS_only = True):
-                    
+                    """
+                    Optimises the elastic net model parameters for best CV R2 from seismic spectra and aws inputs.
+
+                    Parameters:
+                        fmin (int):
+                            Minimum frequency value for calculating the power of each bandwidths.
+                        fmax (int):
+                            Maximum frequency value for calculating the power of each bandwidths.
+                        f_band_width (int):
+                            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+                        step_size (int):
+                            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+                        n_splits (int):
+                            Number of times to repeat the cross validation calculation
+                        min_WS (int):
+                            Minimum wind speed (km/hr) to be considered in analysis.
+                        WS_only (bool):
+                            True/False. False to consider speed and direction.
+                    """
                     # Bands
                     # Create Bandwidths
                     bands = []
@@ -2343,6 +2381,26 @@ class Seismic:
                                 n_splits = 5,
                                 min_WS = None,
                                 WS_only = True):
+                    """
+                    Optimises the support vector regression model parameters for best CV R2 from seismic spectra and aws inputs.
+
+                    Parameters:
+                        fmin (int):
+                            Minimum frequency value for calculating the power of each bandwidths.
+                        fmax (int):
+                            Maximum frequency value for calculating the power of each bandwidths.
+                        f_band_width (int):
+                            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+                        step_size (int):
+                            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+                        n_splits (int):
+                            Number of times to repeat the cross validation calculation
+                        min_WS (int):
+                            Minimum wind speed (km/hr) to be considered in analysis.
+                        WS_only (bool):
+                            True/False. False to consider speed and direction.
+                    """
+                    
                     # Bands
                     # Create Bandwidths
                     bands = []
@@ -2495,112 +2553,131 @@ class Seismic:
                                 step_size = 1,
                                 n_splits = 5,
                                 min_WS = None):
-                    
-                        # Bands
-                        # Create Bandwidths
-                        bands = []
-                        for f1 in range(fmin, fmax - f_band_width + 1, step_size):
-                            f2 = f1 + f_band_width
-                            band = (f1, f2)
-                            bands.append(band)
-                        # Create Band Centers
-                        band_centres = []
-                        for f1, f2 in bands:
-                            band_centre = [(f1 + f2)/2]
-                            band_centres.append(band_centre)
-                    
-                        # Loop through stations
-                        for station_dict in self.seismic_wind.fft:
-                    
-                            # Setup Variables
-                            station = list(station_dict.keys())[0] 
-                            EW_power = station_dict[station][0]['EW']
-                            NS_power = station_dict[station][0]['NS']
-                            Z_power = station_dict[station][0]['Z']
-                            freq = station_dict[station][0]['freq']
-                            aws_values = station_dict[station][0]['aws_values']
-                            wind_direction = station_dict[station][0]['wind_direction']
-                    
-                            # Angle wrap around problem
-                            dir_radians = np.deg2rad(wind_direction)
-                            dir_sin = np.sin(dir_radians)
-                            dir_cos = np.cos(dir_radians)
+                    """
+                    Optimises the random forest model parameters for best CV R2 from seismic spectra and aws inputs.
+                    This is less optimised than the other functions as it only tests a random selection
+                    of parameters to find the best. This is due to large computational times. 
+                    Wind direction values are not computed.
+
+                    Parameters:
+                        fmin (int):
+                            Minimum frequency value for calculating the power of each bandwidths.
+                        fmax (int):
+                            Maximum frequency value for calculating the power of each bandwidths.
+                        f_band_width (int):
+                            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+                        step_size (int):
+                            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+                        n_splits (int):
+                            Number of times to repeat the cross validation calculation
+                        min_WS (int):
+                            Minimum wind speed (km/hr) to be considered in analysis.
+                    """
+                    # Bands
+                    # Create Bandwidths
+                    bands = []
+                    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+                        f2 = f1 + f_band_width
+                        band = (f1, f2)
+                        bands.append(band)
+                    # Create Band Centers
+                    band_centres = []
+                    for f1, f2 in bands:
+                        band_centre = [(f1 + f2)/2]
+                        band_centres.append(band_centre)
+                
+                    # Loop through stations
+                    for station_dict in self.seismic_wind.fft:
+                
+                        # Setup Variables
+                        station = list(station_dict.keys())[0] 
+                        EW_power = station_dict[station][0]['EW']
+                        NS_power = station_dict[station][0]['NS']
+                        Z_power = station_dict[station][0]['Z']
+                        freq = station_dict[station][0]['freq']
+                        aws_values = station_dict[station][0]['aws_values']
+                        wind_direction = station_dict[station][0]['wind_direction']
+                
+                        # Angle wrap around problem
+                        dir_radians = np.deg2rad(wind_direction)
+                        dir_sin = np.sin(dir_radians)
+                        dir_cos = np.cos(dir_radians)
+                        
+                        # Setup results
+                        station_results = []
+                        
+                        # Setup powers
+                        X_Z = np.zeros((len(aws_values), len(bands)))
+                        X_NS = np.zeros((len(aws_values), len(bands)))
+                        X_EW = np.zeros((len(aws_values), len(bands)))
+                
+                        # Apply bandwidths to data
+                        for i, (f1,f2) in enumerate(bands):
+                            band_width = (freq >= f1) & (freq < f2)
+                
+                            # Convert to log to better inspect power scales and apply bandwidth
+                            # [:, band_width], select frequencies and slice unwanted freq data from the row
+                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+                
+                        # Stack all together to process all together as a larger dataset
+                        X_all = np.column_stack([X_Z, X_NS, X_EW])
+                        y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+                
+                
+                        # Should the wind speed threshold be applied before or after training the model?
+                        # Apply minimum WS threshold
+                        if min_WS is not None:
+                            mask = y_all[:, 0] > min_WS
+                            X_all = X_all[mask]
+                            y_all = y_all[mask]
                             
-                            # Setup results
-                            station_results = []
-                            
-                            # Setup powers
-                            X_Z = np.zeros((len(aws_values), len(bands)))
-                            X_NS = np.zeros((len(aws_values), len(bands)))
-                            X_EW = np.zeros((len(aws_values), len(bands)))
-                    
-                            # Apply bandwidths to data
-                            for i, (f1,f2) in enumerate(bands):
-                                band_width = (freq >= f1) & (freq < f2)
-                    
-                                # Convert to log to better inspect power scales and apply bandwidth
-                                # [:, band_width], select frequencies and slice unwanted freq data from the row
-                                # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
-                                X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
-                                X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
-                                X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
-                    
-                            # Stack all together to process all together as a larger dataset
-                            X_all = np.column_stack([X_Z, X_NS, X_EW])
-                            y_all = np.column_stack([aws_values, dir_sin, dir_cos])
-                    
-                    
-                            # Should the wind speed threshold be applied before or after training the model?
-                            # Apply minimum WS threshold
-                            if min_WS is not None:
-                                mask = y_all[:, 0] > min_WS
-                                X_all = X_all[mask]
-                                y_all = y_all[mask]
-                                
-                            # Train Model
-                            X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
-                    
-                            # Find best paramters
-                            # setup parameter grid
-                            param_grid = {'n_estimators': [50, 100, 150, 200],
-                                            'max_depth': [5, 10, 15, None],
-                                            'min_samples_split': [2, 5, 10],
-                                            'min_samples_leaf': [1, 3, 5],
-                                            'max_features': [0.5, 0.75, 1.0]}
+                        # Train Model
+                        X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
+                
+                        # Find best paramters
+                        # setup parameter grid
+                        param_grid = {'n_estimators': [50, 100, 150, 200],
+                                        'max_depth': [5, 10, 15, None],
+                                        'min_samples_split': [2, 5, 10],
+                                        'min_samples_leaf': [1, 3, 5],
+                                        'max_features': [0.5, 0.75, 1.0]}
 
-                    
-                            cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+                
+                        cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
 
-                            search = RandomizedSearchCV(RandomForestRegressor(random_state=42, n_jobs=1), 
-                                                        param_distributions = param_grid,
-                                                        n_iter = 40,
-                                                        scoring = 'r2',
-                                                        cv=cv,
-                                                        random_state=42,
-                                                        n_jobs=-1,
-                                                        refit=False)
-                            search.fit(X_all_train, y_all_train[:,0])
+                        search = RandomizedSearchCV(RandomForestRegressor(random_state=42, n_jobs=1), 
+                                                    param_distributions = param_grid,
+                                                    n_iter = 40,
+                                                    scoring = 'r2',
+                                                    cv=cv,
+                                                    random_state=42,
+                                                    n_jobs=-1,
+                                                    refit=False)
+                        search.fit(X_all_train, y_all_train[:,0])
 
-                            best_var_params = search.best_params_
-                            best_var_r2 = search.best_score_
-                   
-                            print("WS:")
-                            print("n_estimators:", best_var_params['n_estimators'])
-                            print("depths:", best_var_params['max_depth'])
-                            print("min_sample_split:", best_var_params['min_samples_split'])
-                            print("min_sample_leaf:", best_var_params['min_samples_leaf'])
-                            print("max_features:", best_var_params['max_features'])
-                            print("CV R²:", best_var_r2)
-                            print("--------------------------------------------------") 
+                        best_var_params = search.best_params_
+                        best_var_r2 = search.best_score_
+                
+                        print("WS:")
+                        print("n_estimators:", best_var_params['n_estimators'])
+                        print("depths:", best_var_params['max_depth'])
+                        print("min_sample_split:", best_var_params['min_samples_split'])
+                        print("min_sample_leaf:", best_var_params['min_samples_leaf'])
+                        print("max_features:", best_var_params['max_features'])
+                        print("CV R²:", best_var_r2)
+                        print("--------------------------------------------------") 
 
-                            # This needs to be reworked to fit multiple station dictionary
-                            self.n_estimators = best_var_params['n_estimators']
-                            self.max_depth = best_var_params['max_depth']
-                            self.min_samples_split = best_var_params['min_samples_split']
-                            self.min_samples_leaf = best_var_params['min_samples_leaf']
-                            self.max_features = best_var_params['max_features']
+                        # This needs to be reworked to fit multiple station dictionary
+                        self.n_estimators = best_var_params['n_estimators']
+                        self.max_depth = best_var_params['max_depth']
+                        self.min_samples_split = best_var_params['min_samples_split']
+                        self.min_samples_leaf = best_var_params['min_samples_leaf']
+                        self.max_features = best_var_params['max_features']
 
-                            return self.n_estimators, self.max_depth, self.min_samples_split, self.min_samples_leaf, self.max_features
+                        return self.n_estimators, self.max_depth, self.min_samples_split, self.min_samples_leaf, self.max_features
 
                 # Model Analysis
                 def RF(self,
@@ -2633,7 +2710,7 @@ class Seismic:
                         fmin (int):
                             Minimum frequency value for calculating the power of each bandwidths.
                         fmax (int):
-                            Maximum frequency value for calculating the power of each  bandwidths.
+                            Maximum frequency value for calculating the power of each bandwidths.
                         f_band_width (int):
                             Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
                         step_size (int):

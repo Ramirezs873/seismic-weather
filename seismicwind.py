@@ -2676,7 +2676,8 @@ class Seismic:
                        max_depth = None,
                        min_samples_split = None,
                        min_samples_leaf = None,
-                       max_features = None):
+                       max_features = None,
+                       WS_only = True):
                     
                     """
                     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -2800,122 +2801,135 @@ class Seismic:
                                                           min_samples_split=min_samples_split,
                                                           min_samples_leaf=min_samples_leaf,
                                                           max_features=max_features, random_state=42, n_jobs=1)
-                        sin_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
-                                                          min_samples_split=min_samples_split,
-                                                          min_samples_leaf=min_samples_leaf,
-                                                          max_features=max_features, random_state=42, n_jobs=1)
-                        cos_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
-                                                          min_samples_split=min_samples_split,
-                                                          min_samples_leaf=min_samples_leaf,
-                                                          max_features=max_features, random_state=42, n_jobs=1)
+                        if WS_only == False:
+                            sin_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
+                                                            min_samples_split=min_samples_split,
+                                                            min_samples_leaf=min_samples_leaf,
+                                                            max_features=max_features, random_state=42, n_jobs=1)
+                            cos_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
+                                                            min_samples_split=min_samples_split,
+                                                            min_samples_leaf=min_samples_leaf,
+                                                            max_features=max_features, random_state=42, n_jobs=1)
                 
                         # Cross Validation
                         cv = KFold(n_splits=5, shuffle=True, random_state=42)
                         var_scores = cross_val_score(var_model, X_all_train, y_all_train[:, 0], cv=cv, scoring='r2')
-                        sin_scores = cross_val_score(sin_model, X_all_train, y_all_train[:, 1], cv=cv, scoring='r2')
-                        cos_scores = cross_val_score(cos_model, X_all_train, y_all_train[:, 2], cv=cv, scoring='r2')
+                        if WS_only == False:
+                            sin_scores = cross_val_score(sin_model, X_all_train, y_all_train[:, 1], cv=cv, scoring='r2')
+                            cos_scores = cross_val_score(cos_model, X_all_train, y_all_train[:, 2], cv=cv, scoring='r2')
                 
                         # Fit Model
                         var_model.fit(X_all_train, y_all_train[:,0])
-                        sin_model.fit(X_all_train, y_all_train[:, 1])
-                        cos_model.fit(X_all_train, y_all_train[:, 2])
+                        if WS_only == False:
+                            sin_model.fit(X_all_train, y_all_train[:, 1])
+                            cos_model.fit(X_all_train, y_all_train[:, 2])
                 
                         # Predictions
                         var_pred = var_model.predict(X_all_test)
-                        sin_pred = sin_model.predict(X_all_test)
-                        cos_pred = cos_model.predict(X_all_test)
+                        if WS_only == False:
+                            sin_pred = sin_model.predict(X_all_test)
+                            cos_pred = cos_model.predict(X_all_test)
                 
                         # Round WS Prediction to one decimal so it matches with AWS Measurement
                         var_pred = np.round(var_pred, decimals=1)
                 
                         # Observed
                         y_var_test = y_all_test[:, 0]
-                        y_sin_test = y_all_test[:, 1]
-                        y_cos_test = y_all_test[:, 2]
+                        if WS_only == False:
+                            y_sin_test = y_all_test[:, 1]
+                            y_cos_test = y_all_test[:, 2]
                 
                     
-                        # Predicted direction
-                        dir_pred_radian = np.arctan2(sin_pred, cos_pred)
-                        dir_pred = np.rad2deg(dir_pred_radian)
-                
-                        # Round to nearest 10 degrees
-                        dir_pred = np.round(dir_pred, decimals=-1)
-                        
-                        # Wrap back to 0-360 degrees
-                        dir_pred = dir_pred % 360 
-                
-                        # Fix angles near end points
-                        dir_test_radian = np.arctan2(y_sin_test, y_cos_test)
-                        dir_test = np.rad2deg(dir_test_radian) % 360
-                        dir_fix = np.abs((dir_pred - dir_test + 180) % 360 - 180)
-                
-                        # Mean direction
-                        dir_mean = np.mean(dir_fix)
+                            # Predicted direction
+                            dir_pred_radian = np.arctan2(sin_pred, cos_pred)
+                            dir_pred = np.rad2deg(dir_pred_radian)
+                    
+                            # Round to nearest 10 degrees
+                            dir_pred = np.round(dir_pred, decimals=-1)
+                            
+                            # Wrap back to 0-360 degrees
+                            dir_pred = dir_pred % 360 
+                    
+                            # Fix angles near end points
+                            dir_test_radian = np.arctan2(y_sin_test, y_cos_test)
+                            dir_test = np.rad2deg(dir_test_radian) % 360
+                            dir_fix = np.abs((dir_pred - dir_test + 180) % 360 - 180)
+                    
+                            # Mean direction
+                            dir_mean = np.mean(dir_fix)
                 
                         # rmse
                         var_rmse = np.sqrt(mean_squared_error(y_var_test, var_pred))
-                        sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
-                        cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
-                        dir_rmse = np.sqrt(np.mean(dir_fix**2))
-                
+                        if WS_only == False:
+                            sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
+                            cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
+                            dir_rmse = np.sqrt(np.mean(dir_fix**2))
+                    
                         # R²
                         var_r2 = r2_score(y_var_test, var_pred)
-                        sin_r2 = r2_score(y_sin_test, sin_pred)
-                        cos_r2 = r2_score(y_cos_test, cos_pred)
+                        if WS_only == False:
+                            sin_r2 = r2_score(y_sin_test, sin_pred)
+                            cos_r2 = r2_score(y_cos_test, cos_pred)
                 
                         # Freq Importance
                         var_importance = permutation_importance(var_model, X_all_test, y_var_test, n_repeats=n_repeats, scoring='r2').importances_mean
-                        sin_importance = permutation_importance(sin_model, X_all_test, y_sin_test, n_repeats=n_repeats, scoring='r2').importances_mean
-                        cos_importance = permutation_importance(cos_model, X_all_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
-                        #dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
+                        if WS_only == False:
+                            sin_importance = permutation_importance(sin_model, X_all_test, y_sin_test, n_repeats=n_repeats, scoring='r2').importances_mean
+                            cos_importance = permutation_importance(cos_model, X_all_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
+                            #dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
                 
                         # Store results
                         station_results.append({
                             'fmin': fmin,
                             'fmax': fmax,
                             'var_r2': var_r2,
-                            'sin_r2': sin_r2,
-                            'cos_r2': cos_r2,
+                            #'sin_r2': sin_r2,
+                            #'cos_r2': cos_r2,
                             'var_rmse': var_rmse,
-                            'sin_rmse': sin_rmse,
-                            'cos_rmse': cos_rmse,
+                            #'sin_rmse': sin_rmse,
+                            #'cos_rmse': cos_rmse,
                             'y_var_test': y_var_test,
-                            'y_sin_test': y_sin_test,
-                            'y_cos_test': y_cos_test,
+                            #'y_sin_test': y_sin_test,
+                            #'y_cos_test': y_cos_test,
                             'var_pred': var_pred,
-                            'sin_pred': sin_pred,
-                            'cos_pred': cos_pred,
+                            #'sin_pred': sin_pred,
+                            #'cos_pred': cos_pred,
                             'var_cv_r2': var_scores.mean(),
-                            'sin_cv_r2': sin_scores.mean(),
-                            'cos_cv_r2': cos_scores.mean(),
+                            #'sin_cv_r2': sin_scores.mean(),
+                            #'cos_cv_r2': cos_scores.mean(),
                             'var_cv_std': var_scores.std(),
-                            'sin_cv_std': sin_scores.std(),
-                            'cos_cv_std': cos_scores.std(),
-                            'dir_pred': dir_pred,
-                            'dir_test': dir_test,
-                            'dir_mean_error': dir_mean,
-                            'dir_rmse': dir_rmse}) 
+                            #'sin_cv_std': sin_scores.std(),
+                            #'cos_cv_std': cos_scores.std(),
+                            #'dir_pred': dir_pred,
+                            #'dir_test': dir_test,
+                            #'dir_mean_error': dir_mean,
+                            #'dir_rmse': dir_rmse
+                            }) 
                         
                         # Print best result
                         # R²
                         print(f"{variable_name} R²: {var_r2:.4f}")
-                        print(f"Sin R²: {sin_r2:.4f}")
-                        print(f"Cos R²: {cos_r2:.4f}")
+                        if WS_only == False:
+                            print(f"Sin R²: {sin_r2:.4f}")
+                            print(f"Cos R²: {cos_r2:.4f}")
                 
                         # rmse
                         print(f"{variable_name} rmse: {var_rmse:.4f}")
-                        print(f"Sin rmse: {sin_rmse:.4f}")
-                        print(f"Cos rmse: {cos_rmse:.4f}")
+                        if WS_only == False:
+                            print(f"Sin rmse: {sin_rmse:.4f}")
+                            print(f"Cos rmse: {cos_rmse:.4f}")
                 
                         # Cross Validation R²
                         print(f"{variable_name} cv R²: {var_scores.mean():.4f} +/- {var_scores.std():.4f}")
-                        print(f"Sin cv R²: {sin_scores.mean():.4f} +/- {sin_scores.std():.4f}")
-                        print(f"Cos cv R²: {cos_scores.mean():.4f} +/- {cos_scores.std():.4f}")
+                        if WS_only == False:
+                            print(f"Sin cv R²: {sin_scores.mean():.4f} +/- {sin_scores.std():.4f}")
+                            print(f"Cos cv R²: {cos_scores.mean():.4f} +/- {cos_scores.std():.4f}")
                         results.append(station_results)
-                
-                        # WD
-                        print(f"Wind direction Mean Error: {dir_mean:.2f}°")
-                        print(f"Wind direction RMSE: {dir_rmse:.2f}°")
+
+                        if WS_only == False:
+                            # WD
+                            print(f"Wind direction Mean Error: {dir_mean:.2f}°")
+                            print(f"Wind direction RMSE: {dir_rmse:.2f}°")
                 
                         # Plot all average R² and rmse results against centre frequency
                         if plot_stat_results == True:

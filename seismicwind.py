@@ -2087,6 +2087,11 @@ class Seismic:
                     self.min_samples_split = None
                     self.min_samples_leaf = None
                     self.max_features = None
+                    self.n_estimators_WD = None,
+                    self.max_depth_WD = None, 
+                    self.min_samples_split_WD = None, 
+                    self.min_samples_leaf_WD = None, 
+                    self.max_features_WD = None,
                     self.C = None
                     self.gamma = None
                     self.epsilon = None
@@ -2101,7 +2106,7 @@ class Seismic:
                     self.alpha_Ridge_WD = None
 
                 # Optimisation
-                def optimise_ridge(self,
+                def optimise_Ridge(self,
                                    fmin = 1,
                                    fmax = 49,
                                    f_band_width = 1,
@@ -2600,14 +2605,14 @@ class Seismic:
 
                     return self.C, self.gamma, self.epsilon
 
-
                 def optimise_RF(self,
                                 fmin = 1,
                                 fmax = 49,
                                 f_band_width = 1,
                                 step_size = 1,
                                 n_splits = 5,
-                                min_WS = None):
+                                min_WS = None,
+                                WS_only = True):
                     """
                     Optimises the random forest model parameters for best CV R2 from seismic spectra and aws inputs.
                     This is less optimised than the other functions as it only tests a random selection
@@ -2691,7 +2696,9 @@ class Seismic:
                             
                         # Train Model
                         X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
-                
+
+                        y_all_WD_train = y_all_train[:, 1:3]
+
                         # Find best paramters
                         # setup parameter grid
                         param_grid = {'n_estimators': [50, 100, 150, 200],
@@ -2715,7 +2722,12 @@ class Seismic:
 
                         best_var_params = search.best_params_
                         best_var_r2 = search.best_score_
-                
+                        self.n_estimators = best_var_params['n_estimators']
+                        self.max_depth = best_var_params['max_depth']
+                        self.min_samples_split = best_var_params['min_samples_split']
+                        self.min_samples_leaf = best_var_params['min_samples_leaf']
+                        self.max_features = best_var_params['max_features']
+
                         print("WS:")
                         print("n_estimators:", best_var_params['n_estimators'])
                         print("depths:", best_var_params['max_depth'])
@@ -2725,13 +2737,35 @@ class Seismic:
                         print("CV R²:", best_var_r2)
                         print("--------------------------------------------------") 
 
-                        # This needs to be reworked to fit multiple station dictionary
-                        self.n_estimators = best_var_params['n_estimators']
-                        self.max_depth = best_var_params['max_depth']
-                        self.min_samples_split = best_var_params['min_samples_split']
-                        self.min_samples_leaf = best_var_params['min_samples_leaf']
-                        self.max_features = best_var_params['max_features']
+                        if WS_only == False:
 
+                            search_WD = RandomizedSearchCV(RandomForestRegressor(random_state=42, n_jobs=1),
+                                                        param_distributions=param_grid,
+                                                        n_iter=40,
+                                                        scoring=lambda estimator, X, y: -np.mean(np.abs(
+                                                                                    (np.rad2deg(np.arctan2(
+                                                                                        estimator.predict(X)[:, 0],
+                                                                                        estimator.predict(X)[:, 1])) 
+                                                                                        - np.rad2deg(np.arctan2(y[:, 0], y[:, 1])) + 180) % 360 - 180)),
+                                                        cv=cv,
+                                                        random_state=42,
+                                                        n_jobs=-1,
+                                                        refit=False)
+                            search_WD.fit(X_all_train, y_all_WD_train)
+
+                            best_WD_params = search_WD.best_params_
+                            best_WD_error = -search_WD.best_score_
+                            best_WD_std = search_WD.cv_results_['std_test_score'][search_WD.best_index_]
+                            
+                            self.n_estimators_WD = best_WD_params['n_estimators']
+                            self.max_depth_WD = best_WD_params['max_depth']
+                            self.min_samples_split_WD = best_WD_params['min_samples_split']
+                            self.min_samples_leaf_WD = best_WD_params['min_samples_leaf']
+                            self.max_features_WD = best_WD_params['max_features']
+
+                            return self.n_estimators, self.max_depth, self.min_samples_split, self.min_samples_leaf, self.max_features, self.n_estimators_WD, self.max_depth_WD, self.min_samples_split_WD, self.min_samples_leaf_WD, self.max_features_WD
+                                    
+                        
                         return self.n_estimators, self.max_depth, self.min_samples_split, self.min_samples_leaf, self.max_features
 
                 # Model Analysis
@@ -2753,6 +2787,11 @@ class Seismic:
                        min_samples_split = None,
                        min_samples_leaf = None,
                        max_features = None,
+                       n_estimators_WD = None,
+                       max_depth_WD = None,
+                       min_samples_split_WD = None,
+                       min_samples_leaf_WD = None,
+                       max_features_WD = None,
                        WS_only = True):
                     
                     """
@@ -2803,6 +2842,17 @@ class Seismic:
                         min_samples_leaf = self.min_samples_leaf
                     if max_features is None:
                         max_features = self.max_features
+                    if WS_only == False:
+                        if n_estimators_WD is None:
+                            n_estimators_WD = self.n_estimators_WD
+                        if max_depth_WD is None:
+                            max_depth_WD = self.max_depth_WD
+                        if min_samples_split_WD is None:
+                            min_samples_split_WD = self.min_samples_split_WD
+                        if min_samples_leaf_WD is None:
+                            min_samples_leaf_WD = self.min_samples_leaf_WD
+                        if max_features_WD is None:
+                            max_features_WD = self.max_features_WD
 
                     # Setup Result Lists
                     results = []
@@ -2878,14 +2928,14 @@ class Seismic:
                                                           min_samples_leaf=min_samples_leaf,
                                                           max_features=max_features, random_state=42, n_jobs=-1)
                         if WS_only == False:
-                            sin_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
-                                                            min_samples_split=min_samples_split,
-                                                            min_samples_leaf=min_samples_leaf,
-                                                            max_features=max_features, random_state=42, n_jobs=-1)
-                            cos_model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, 
-                                                            min_samples_split=min_samples_split,
-                                                            min_samples_leaf=min_samples_leaf,
-                                                            max_features=max_features, random_state=42, n_jobs=-1)
+                            sin_model = RandomForestRegressor(n_estimators=n_estimators_WD, max_depth=max_depth_WD, 
+                                                            min_samples_split=min_samples_split_WD,
+                                                            min_samples_leaf=min_samples_leaf_WD,
+                                                            max_features=max_features_WD, random_state=42, n_jobs=-1)
+                            cos_model = RandomForestRegressor(n_estimators=n_estimators_WD, max_depth=max_depth_WD, 
+                                                            min_samples_split=min_samples_split_WD,
+                                                            min_samples_leaf=min_samples_leaf_WD,
+                                                            max_features=max_features_WD, random_state=42, n_jobs=-1)
                 
                         # Cross Validation
                         cv = KFold(n_splits=5, shuffle=True, random_state=42)
@@ -2934,6 +2984,7 @@ class Seismic:
                     
                             # Mean direction
                             dir_mean = np.mean(dir_fix)
+                            dir_std_error = np.std(dir_fix, ddof=1)  
 
 
                         # Wind speed errors
@@ -2968,30 +3019,30 @@ class Seismic:
                             'fmin': fmin,
                             'fmax': fmax,
                             'var_r2': var_r2,
-                            #'sin_r2': sin_r2,
-                            #'cos_r2': cos_r2,
+                            'sin_r2': sin_r2,
+                            'cos_r2': cos_r2,
                             'var_rmse': var_rmse,
-                            #'sin_rmse': sin_rmse,
-                            #'cos_rmse': cos_rmse,
+                            'sin_rmse': sin_rmse,
+                            'cos_rmse': cos_rmse,
                             'y_var_test': y_var_test,
-                            #'y_sin_test': y_sin_test,
-                            #'y_cos_test': y_cos_test,
+                            'y_sin_test': y_sin_test,
+                            'y_cos_test': y_cos_test,
                             'var_pred': var_pred,
-                            #'sin_pred': sin_pred,
-                            #'cos_pred': cos_pred,
+                            'sin_pred': sin_pred,
+                            'cos_pred': cos_pred,
                             'var_cv_r2': var_scores.mean(),
-                            #'sin_cv_r2': sin_scores.mean(),
-                            #'cos_cv_r2': cos_scores.mean(),
+                            'sin_cv_r2': sin_scores.mean(),
+                            'cos_cv_r2': cos_scores.mean(),
                             'var_cv_std': var_scores.std(),
-                            #'sin_cv_std': sin_scores.std(),
-                            #'cos_cv_std': cos_scores.std(),
-                            #'dir_pred': dir_pred,
-                            #'dir_test': dir_test,
-                            #'dir_mean_error': dir_mean,
-                            #'dir_rmse': dir_rmse,
+                            'sin_cv_std': sin_scores.std(),
+                            'cos_cv_std': cos_scores.std(),
+                            'dir_pred': dir_pred,
+                            'dir_test': dir_test,
+                            'dir_mean_error': dir_mean,
+                            'dir_rmse': dir_rmse,
+                            'dir_std_error': dir_std_error,
                             'var_mean_error': var_mean_error,
-                            'var_std_error': var_std_error}) 
-                        
+                            'var_std_error': var_std_error,})
                         # Print best result
                         # R²
                         print(f"{variable_name} R²: {var_r2:.4f}")

@@ -2911,6 +2911,7 @@ class Seismic:
                 
                         # Observed
                         y_var_test = y_all_test[:, 0]
+                        
                         if WS_only == False:
                             y_sin_test = y_all_test[:, 1]
                             y_cos_test = y_all_test[:, 2]
@@ -2933,7 +2934,15 @@ class Seismic:
                     
                             # Mean direction
                             dir_mean = np.mean(dir_fix)
-                
+
+
+                        # Wind speed errors
+                        var_error = y_var_test - var_pred
+                        var_abs_error = np.abs(var_error)
+                        var_rmse = np.sqrt(np.mean(var_error**2))
+                        var_mean_error = np.mean(var_abs_error)
+                        var_std_error = np.std(var_abs_error, ddof=1)
+
                         # rmse
                         var_rmse = np.sqrt(mean_squared_error(y_var_test, var_pred))
                         if WS_only == False:
@@ -2979,8 +2988,9 @@ class Seismic:
                             #'dir_pred': dir_pred,
                             #'dir_test': dir_test,
                             #'dir_mean_error': dir_mean,
-                            #'dir_rmse': dir_rmse
-                            }) 
+                            #'dir_rmse': dir_rmse,
+                            'var_mean_error': var_mean_error,
+                            'var_std_error': var_std_error}) 
                         
                         # Print best result
                         # R²
@@ -3518,7 +3528,13 @@ class Seismic:
                         y_var_test = y_all_test[:, 0]
                         y_sin_test = y_all_test[:, 1]
                         y_cos_test = y_all_test[:, 2]
-                
+
+                        # Wind speed errors
+                        var_error = y_var_test - var_pred
+                        var_abs_error = np.abs(var_error)
+                        var_rmse = np.sqrt(np.mean(var_error**2))
+                        var_mean_error = np.mean(var_abs_error)
+                        var_std_error = np.std(var_abs_error, ddof=1)
                     
                         # Predicted direction
                         dir_pred_radian = np.arctan2(sin_pred, cos_pred)
@@ -3537,9 +3553,8 @@ class Seismic:
                 
                         # Mean direction
                         dir_mean = np.mean(dir_fix)
-                
+                        dir_std_error = np.std(dir_fix, ddof=1)    
                         # rmse
-                        var_rmse = np.sqrt(mean_squared_error(y_var_test, var_pred))
                         sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
                         cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
                         dir_rmse = np.sqrt(np.mean(dir_fix**2))
@@ -3580,7 +3595,10 @@ class Seismic:
                             'dir_pred': dir_pred,
                             'dir_test': dir_test,
                             'dir_mean_error': dir_mean,
-                            'dir_rmse': dir_rmse}) 
+                            'dir_rmse': dir_rmse,
+                            'dir_std_error': dir_std_error,
+                            'var_mean_error': var_mean_error,
+                            'var_std_error': var_std_error,}) 
                         
                         # Print best result
                         # R²
@@ -4107,6 +4125,12 @@ class Seismic:
                         y_sin_test = y_all_test[:, 1]
                         y_cos_test = y_all_test[:, 2]
                 
+                        # Wind speed errors
+                        var_error = y_var_test - var_pred
+                        var_abs_error = np.abs(var_error)
+                        var_rmse = np.sqrt(np.mean(var_error**2))
+                        var_mean_error = np.mean(var_abs_error)
+                        var_std_error = np.std(var_abs_error, ddof=1)
                     
                         # Predicted direction
                         dir_pred_radian = np.arctan2(sin_pred, cos_pred)
@@ -4125,9 +4149,8 @@ class Seismic:
                 
                         # Mean direction
                         dir_mean = np.mean(dir_fix)
-                
+                        dir_std_error = np.std(dir_fix, ddof=1)    
                         # rmse
-                        var_rmse = np.sqrt(mean_squared_error(y_var_test, var_pred))
                         sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
                         cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
                         dir_rmse = np.sqrt(np.mean(dir_fix**2))
@@ -4142,8 +4165,6 @@ class Seismic:
                         sin_importance = permutation_importance(sin_model, X_all_test, y_sin_test, n_repeats=n_repeats, scoring='r2').importances_mean
                         cos_importance = permutation_importance(cos_model, X_all_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
                         #dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
-                
-                        # Coeffs? see full_elasticnet?
                 
                         # Store results
                         station_results.append({
@@ -4170,7 +4191,10 @@ class Seismic:
                             'dir_pred': dir_pred,
                             'dir_test': dir_test,
                             'dir_mean_error': dir_mean,
-                            'dir_rmse': dir_rmse}) 
+                            'dir_rmse': dir_rmse,
+                            'dir_std_error': dir_std_error,
+                            'var_mean_error': var_mean_error,
+                            'var_std_error': var_std_error,}) 
                         
                         # Print best result
                         # R²
@@ -4690,7 +4714,13 @@ class Seismic:
                         y_var_test = y_all_test[:, 0]
                         y_sin_test = y_all_test[:, 1]
                         y_cos_test = y_all_test[:, 2]
-                
+                                   
+                        # Wind speed errors
+                        var_error = y_var_test - var_pred
+                        var_abs_error = np.abs(var_error)
+                        var_rmse = np.sqrt(np.mean(var_error**2))
+                        var_mean_error = np.mean(var_abs_error)
+                        var_std_error = np.std(var_abs_error, ddof=1)
                     
                         # Predicted direction
                         dir_pred_radian = np.arctan2(sin_pred, cos_pred)
@@ -4709,9 +4739,8 @@ class Seismic:
                 
                         # Mean direction
                         dir_mean = np.mean(dir_fix)
-                
+                        dir_std_error = np.std(dir_fix, ddof=1)    
                         # rmse
-                        var_rmse = np.sqrt(mean_squared_error(y_var_test, var_pred))
                         sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
                         cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
                         dir_rmse = np.sqrt(np.mean(dir_fix**2))
@@ -4726,8 +4755,6 @@ class Seismic:
                         sin_importance = permutation_importance(sin_model, X_all_test, y_sin_test, n_repeats=n_repeats, scoring='r2').importances_mean
                         cos_importance = permutation_importance(cos_model, X_all_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
                         #dir_importance = np.sqrt(sin_importance**2 + cos_importance**2)
-                
-                        # Coeffs? see full_ridge?
                 
                         # Store results
                         station_results.append({
@@ -4754,7 +4781,10 @@ class Seismic:
                             'dir_pred': dir_pred,
                             'dir_test': dir_test,
                             'dir_mean_error': dir_mean,
-                            'dir_rmse': dir_rmse}) 
+                            'dir_rmse': dir_rmse,
+                            'dir_std_error': dir_std_error,
+                            'var_mean_error': var_mean_error,
+                            'var_std_error': var_std_error,}) 
                         
                         # Print best result
                         # R²

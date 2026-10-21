@@ -2090,9 +2090,15 @@ class Seismic:
                     self.C = None
                     self.gamma = None
                     self.epsilon = None
+                    self.C_SVR_WD = None
+                    self.gamma_SVR_WD = None
+                    self.epsilon_SVR_WD = None
                     self.alpha_EN = None
                     self.l1_ratio = None
+                    self.alpha_EN_WD = None
+                    self.l1_ratio_EN_WD = None
                     self.alpha_Ridge = None
+                    self.alpha_Ridge_WD = None
 
                 # Optimisation
                 def optimise_ridge(self,
@@ -2174,7 +2180,6 @@ class Seismic:
                         X_all = np.column_stack([X_Z, X_NS, X_EW])
                         y_all = np.column_stack([aws_values, dir_sin, dir_cos])
                 
-                
                         # Should the wind speed threshold be applied before or after training the model?
                         # Apply minimum WS threshold
                         if min_WS is not None:
@@ -2190,34 +2195,60 @@ class Seismic:
                         # setup alpha list
                         alphas = np.logspace(-4, 4, 100)
                 
-                
                         cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
                 
                         # Ridge
                         # Pipeline
                         # Scale, RidgeCV 
+                        # WS - optimise for cross validation R2
                         var_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
-                        if WS_only == False:
-                            sin_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
-                            cos_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', RidgeCV(alphas=alphas, cv=cv, scoring ='r2'))])
-                
                         var_ridge.fit(X_all_train, y_all_train[:, 0])
-                        if WS_only == False:
-                            sin_ridge.fit(X_all_train, y_all_train[:, 1])
-                            cos_ridge.fit(X_all_train, y_all_train[:, 2])
-                
                         print("WS alpha:", var_ridge.named_steps['ridge'].alpha_,
-                                "CV R²:", var_ridge.named_steps['ridge'].best_score_)
-                        print("--------------------------------------------------")
-                        if WS_only == False:
-                            print("Sin2 alpha:", sin_ridge.named_steps['ridge'].alpha_,
-                                    "CV R²:", sin_ridge.named_steps['ridge'].best_score_)
-                            print("--------------------------------------------------")
-                            print("Cos2 alpha:", cos_ridge.named_steps['ridge'].alpha_,
-                                    "CV R²:", cos_ridge.named_steps['ridge'].best_score_)
-
-                        # Needs tobe reworked to work for multiple stations in dict.
+                              "CV R²:", var_ridge.named_steps['ridge'].best_score_)
                         self.alpha_Ridge = var_ridge.named_steps['ridge'].alpha_
+
+                        if WS_only == False:
+                            # WD - two variables, sin and cos - optimise for minimal error in direction
+                            best_dir_error = np.inf
+                            best_dir_alpha = None
+                            for alpha in alphas:
+                                fold_errors = [] 
+                                for train_idx, val_idx in cv.split(X_all_train):
+                                    X_train = X_all_train[train_idx]
+                                    X_val = X_all_train[val_idx]
+
+                                    y_train = y_all_train[train_idx]
+                                    y_val = y_all_train[val_idx]
+
+                                    sin_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha))])
+                                    cos_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha))])
+
+                                    sin_ridge.fit(X_train, y_train[:, 1])
+                                    cos_ridge.fit(X_train, y_train[:, 2])      
+
+                                    sin_pred = sin_ridge.predict(X_val)
+                                    cos_pred = cos_ridge.predict(X_val)
+
+                                    dir_pred = np.rad2deg(np.arctan2(sin_pred, cos_pred)) % 360
+                                    dir_actual = np.rad2deg(np.arctan2(y_val[:, 1], y_val[:, 2])) % 360
+                                    error = np.abs((dir_pred - dir_actual + 180) % 360 - 180)
+
+                                    fold_errors.extend(error)
+
+                                mean_error = np.mean(fold_errors)
+
+                                if mean_error < best_dir_error:
+                                    best_dir_error = mean_error
+                                    best_dir_alpha = alpha
+
+                            self.alpha_Ridge_WD = best_dir_alpha
+
+                            print("Best direction alpha:", best_dir_alpha)
+                            print("CV mean angular error:", best_dir_error)
+                            print("--------------------------------------------------")
+
+                            return self.alpha_Ridge, self.alpha_Ridge_WD
+                        
                         return self.alpha_Ridge
 
                 def optimise_EN(self,
@@ -2320,56 +2351,73 @@ class Seismic:
                         # ElasticNet
                         # Pipeline
                         # Scale, ElasticNet 
+                        # WS - optimise for cross validation R2
                         var_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=2000))])
-                        if WS_only == False:
-                            sin_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=2000))])
-                            cos_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNetCV(alphas=alphas, l1_ratio=l1s, cv=cv, max_iter=2000))])
-                    
                         var_EN.fit(X_all_train, y_all_train[:, 0])
-                        if WS_only == False:
-                            sin_EN.fit(X_all_train, y_all_train[:, 1])
-                            cos_EN.fit(X_all_train, y_all_train[:, 2])
-                
                         # Get optimised values
                         var_alpha = var_EN.named_steps['enet'].alpha_
                         var_l1 = var_EN.named_steps['enet'].l1_ratio_
-
-                        if WS_only == False:
-                            sin_alpha = sin_EN.named_steps['enet'].alpha_
-                            sin_l1 = sin_EN.named_steps['enet'].l1_ratio_
-                    
-                            cos_alpha = cos_EN.named_steps['enet'].alpha_
-                            cos_l1 = cos_EN.named_steps['enet'].l1_ratio_
-                
-                        # Find CV R2 for these params
                         var_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=var_alpha, l1_ratio=var_l1, max_iter=2000))])
-                        if WS_only == False:
-                            sin_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=sin_alpha, l1_ratio=sin_l1, max_iter=2000))])
-                            cos_EN_best = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=cos_alpha, l1_ratio=cos_l1, max_iter=2000))])      
-                
-                        # Cross Validation
                         var_scores = cross_val_score(var_EN_best, X_all_train, y_all_train[:, 0], cv=cv, scoring='r2')
-                        if WS_only == False:
-                            sin_scores = cross_val_score(sin_EN_best, X_all_train, y_all_train[:, 1], cv=cv, scoring='r2')
-                            cos_scores = cross_val_score(cos_EN_best, X_all_train, y_all_train[:, 2], cv=cv, scoring='r2')
-                
                         # Print results
                         print("WS alpha:", var_alpha,
                                 "WS l1_ratio:", var_l1,
                                 "WS CV R²:", var_scores.mean(), "+/-", var_scores.std())
                         print("--------------------------------------------------")
-                        if WS_only == False:
-                            print("Sin2 alpha:", sin_alpha,
-                                    "Sin2 l1_ratio:", sin_l1,
-                                    "Sin2 CV R²:", sin_scores.mean(), "+/-", sin_scores.std())
-                            print("--------------------------------------------------")
-                            print("Cos2 alpha:", cos_alpha,
-                                    "Cos2 l1_ratio:", cos_l1,
-                                    "Cos2 CV R²:", cos_scores.mean(), "+/-", cos_scores.std())
-
-                        # Needs to be reworked for multuiple stations
                         self.alpha_EN = var_alpha
                         self.l1_ratio = var_l1
+
+                        if WS_only == False:
+
+                            best_dir_error = np.inf
+                            best_dir_alpha = None
+                            best_dir_l1 = None
+
+                            for alpha in alphas:
+                                for l1 in l1s:
+
+                                    fold_errors = []
+
+                                    for train_idx, val_idx in cv.split(X_all_train):
+
+                                        X_train = X_all_train[train_idx]
+                                        X_val = X_all_train[val_idx]
+
+                                        y_train = y_all_train[train_idx]
+                                        y_val = y_all_train[val_idx]
+
+                                        sin_EN = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=alpha,l1_ratio=l1, max_iter=2000))])
+
+                                        cos_EN = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=alpha,l1_ratio=l1,max_iter=2000))])
+
+                                        sin_EN.fit(X_train, y_train[:, 1])
+                                        cos_EN.fit(X_train, y_train[:, 2])
+
+                                        sin_pred = sin_EN.predict(X_val)
+                                        cos_pred = cos_EN.predict(X_val)
+
+                                        dir_pred = np.rad2deg(np.arctan2(sin_pred, cos_pred)) % 360
+                                        dir_actual = np.rad2deg(np.arctan2(y_val[:, 1], y_val[:, 2])) % 360
+                                        error = np.abs((dir_pred - dir_actual + 180) % 360 - 180)
+
+                                        fold_errors.extend(error)
+
+                                    mean_error = np.mean(fold_errors)
+
+                                    if mean_error < best_dir_error:
+                                        best_dir_error = mean_error
+                                        best_dir_alpha = alpha
+                                        best_dir_l1 = l1
+
+                            self.alpha_EN_WD = best_dir_alpha
+                            self.l1_ratio_EN_WD = best_dir_l1
+
+                            print("Best direction alpha:", best_dir_alpha)
+                            print("Best direction l1_ratio:", best_dir_l1)
+                            print("CV mean angular error:", best_dir_error)
+                            print("--------------------------------------------------")
+
+                            return (self.alpha_EN, self.l1_ratio, self.alpha_EN_WD, self.l1_ratio_EN_WD)
 
                         return self.alpha_EN, self.l1_ratio
 
@@ -2466,85 +2514,92 @@ class Seismic:
                         X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
                 
                         # Find best alpha
-                        
+                        cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
                         # setup parameter lists
                         c_list = np.logspace(-4, 7, 10)
                         gamma_list = np.logspace(-4, 4, 10)
                         epsilon_list = np.linspace(0.05, 3, 15)
                 
                         best_var_r2 = -np.inf
-                        best_sin_r2 = -np.inf
-                        best_cos_r2 = -np.inf
-                
-                        cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-                
+                        best_var_params = None
+
                         for c in c_list:
                             for g in gamma_list:
                                 for e in epsilon_list:
                                     # Pipeline
                                     # Scale, SVR
                                     var_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
-                                    if WS_only == False:
-                                        sin_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
-                                        cos_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
-                    
-                                    # Cross Validate
                                     var_score = cross_val_score(var_svr, X_all_train, y_all_train[:, 0], cv=cv, scoring ='r2', n_jobs=-1)
-                                    if WS_only == False:
-                                        sin_score = cross_val_score(sin_svr, X_all_train, y_all_train[:, 1], cv=cv, scoring ='r2', n_jobs=-1)
-                                        cos_score = cross_val_score(cos_svr, X_all_train, y_all_train[:, 2], cv=cv, scoring ='r2', n_jobs=-1)
-                            
-                                    # CV R2
                                     var_mean_r2 = var_score.mean()
-                                    if WS_only == False:
-                                        sin_mean_r2 = sin_score.mean()
-                                        cos_mean_r2 = cos_score.mean()
-                
-                                    # Note Parameters
-                                    params = [c, g, e]
-                
-                                    # Is it better than previous iteration? If yes then save params
-                                    # Save best var model
                                     if var_mean_r2 > best_var_r2:
                                         best_var_r2 = var_mean_r2
-                                        best_var_params = params.copy()
-
-                                    if WS_only == False:
-                                        # Save best sin2 model
-                                        if sin_mean_r2 > best_sin_r2:
-                                            best_sin_r2 = sin_mean_r2
-                                            best_sin_params = params.copy()
-                    
-                                        # Save best cos2 model
-                                        if cos_mean_r2 > best_cos_r2:
-                                            best_cos_r2 = cos_mean_r2
-                                            best_cos_params = params.copy()
-                
-                        print("WS:")
-                        print("C:", best_var_params[0])
-                        print("gamma:", best_var_params[1])
-                        print("epsilon:", best_var_params[2])
-                        print("CV R²:", best_var_r2)
-                        print("--------------------------------------------------")
-                        if WS_only == False:
-                            print("Sin2:")
-                            print("C:", best_sin_params[0])
-                            print("gamma:", best_sin_params[1])
-                            print("epsilon:", best_sin_params[2])
-                            print("CV R²:", best_sin_r2)
-                            print("--------------------------------------------------")
-                            print("Cos2:")
-                            print("C:", best_cos_params[0])
-                            print("gamma:", best_cos_params[1])
-                            print("epsilon:", best_cos_params[2])
-                            print("CV R²:", best_cos_r2)
-
-                        # needs to be reworked for all stations in dict    
+                                        best_var_params = [c, g, e]
                         self.C = best_var_params[0]
                         self.gamma = best_var_params[1]
                         self.epsilon = best_var_params[2]
+                        print("WS:")
+                        print("C:", self.C)
+                        print("gamma:", self.gamma)
+                        print("epsilon:", self.epsilon)
+                        print("CV R²:", best_var_r2)
+                        print("--------------------------------------------------")
 
-                        return self.C, self.gamma, self.epsilon
+                        if WS_only == False:
+                            best_dir_error = np.inf
+                            best_dir_params = None
+
+                            for c in c_list:
+                                for g in gamma_list:
+                                    for e in epsilon_list:
+
+                                        fold_errors = []
+
+                                        for train_idx, val_idx in cv.split(X_all_train):
+
+                                            X_train = X_all_train[train_idx]
+                                            X_val = X_all_train[val_idx]
+
+                                            y_train = y_all_train[train_idx]
+                                            y_val = y_all_train[val_idx]
+
+                                        
+                                            sin_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma=g, epsilon=e))])
+
+                                            cos_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma=g, epsilon=e))])
+
+                                            sin_svr.fit(X_train, y_train[:, 1])
+                                            cos_svr.fit(X_train, y_train[:, 2])
+
+                                            sin_pred = sin_svr.predict(X_val)
+                                            cos_pred = cos_svr.predict(X_val)
+
+                                            dir_pred = np.rad2deg(np.arctan2(sin_pred, cos_pred)) % 360
+                                            dir_actual = np.rad2deg(np.arctan2(y_val[:, 1], y_val[:, 2])) % 360
+                                            error = np.abs((dir_pred - dir_actual + 180) % 360 - 180)
+
+                                            fold_errors.extend(error)
+
+                                        mean_error = np.mean(fold_errors)
+
+                                        if mean_error < best_dir_error:
+                                            best_dir_error = mean_error
+                                            best_dir_params = [c, g, e]
+
+                            self.C_SVR_WD = best_dir_params[0]
+                            self.gamma_SVR_WD = best_dir_params[1]
+                            self.epsilon_SVR_WD = best_dir_params[2]
+
+                            print("Wind direction:")
+                            print("C:", self.C_SVR_WD)
+                            print("gamma:", self.gamma_SVR_WD)
+                            print("epsilon:", self.epsilon_SVR_WD)
+                            print("CV mean angular error:", best_dir_error)
+                            print("--------------------------------------------------")
+
+                            return self.C,self.gamma,self.epsilon,self.C_SVR_WD,self.gamma_SVR_WD,self.epsilon_SVR_WD
+
+                    return self.C, self.gamma, self.epsilon
+
 
                 def optimise_RF(self,
                                 fmin = 1,
@@ -3306,7 +3361,10 @@ class Seismic:
                         variable_name = 'AWS Wind Speed (km/hr)',
                         C = None,
                         gamma = None,
-                        epsilon = None):
+                        epsilon = None,
+                        C_SVR_WD = None,
+                        gamma_SVR_WD = None,
+                        epsilon_SVR_WD = None):
 
                     """
                         Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -3355,7 +3413,12 @@ class Seismic:
                         gamma = self.gamma
                     if epsilon is None:
                         epsilon = self.epsilon
-                    
+                    if C_SVR_WD is None:
+                        C_SVR_WD = self.C_SVR_WD
+                    if gamma_SVR_WD is None:
+                        gamma_SVR_WD = self.gamma_SVR_WD
+                    if epsilon_SVR_WD is None:
+                        epsilon_SVR_WD = self.epsilon_SVR_WD
                         
                     # Setup Result Lists
                     results = []
@@ -3429,8 +3492,8 @@ class Seismic:
                         # Scale, SVR
                         # (Need to find optimal values)
                         var_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma=gamma, epsilon=epsilon))])
-                        sin_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma=gamma, epsilon=epsilon))])
-                        cos_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma=gamma, epsilon=epsilon))])
+                        sin_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C_SVR_WD, gamma=gamma_SVR_WD, epsilon=epsilon_SVR_WD))])
+                        cos_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C_SVR_WD, gamma=gamma_SVR_WD, epsilon=epsilon_SVR_WD))])
                 
                         # Cross Validation
                         cv = KFold(n_splits=5, shuffle=True, random_state=42)
@@ -3879,7 +3942,6 @@ class Seismic:
                 
                     return results
 
-
                 def EN(self,
                        fmin = 1,
                        fmax = 49,
@@ -3894,7 +3956,9 @@ class Seismic:
                        plot_power_aws = True,
                        variable_name = 'AWS Wind Speed (km/hr)',
                        alpha_EN = None,
-                       l1_ratio = None):
+                       l1_ratio = None,
+                       alpha_EN_WD = None,
+                       l1_ratio_EN_WD = None):
                     
                     """
                     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -3941,7 +4005,10 @@ class Seismic:
                         alpha_EN = self.alpha_EN
                     if l1_ratio is None:
                         l1_ratio = self.l1_ratio
-
+                    if alpha_EN_WD is None:
+                        alpha_EN_WD = self.alpha_EN_WD
+                    if l1_ratio_EN_WD is None:
+                        l1_ratio_EN_WD = self.l1_ratio_EN_WD
                     # Setup Result Lists
                     results = []
                 
@@ -4013,8 +4080,8 @@ class Seismic:
                         # Pipeline
                         # Scale, ElasticNet (Need to find optimal l1 still)
                         var_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio))])
-                        sin_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio))])
-                        cos_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio))])
+                        sin_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN_WD, l1_ratio=l1_ratio_EN_WD))])
+                        cos_model = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN_WD, l1_ratio=l1_ratio_EN_WD))])
                 
                         # Cross Validation
                         cv = KFold(n_splits=5, shuffle=True, random_state=42)
@@ -4465,7 +4532,6 @@ class Seismic:
                 
                     return results
 
-                
                 def Ridge(self,
                           fmin = 1,
                           fmax = 49,
@@ -4479,7 +4545,8 @@ class Seismic:
                           plot_residuals = True,
                           plot_power_aws = True,
                           variable_name = 'AWS Wind Speed (km/hr)',
-                          alpha_Ridge = None):
+                          alpha_Ridge = None,
+                          alpha_Ridge_WD = None):
 
                     """
                     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -4524,7 +4591,8 @@ class Seismic:
                     # Setup Model Parameters
                     if alpha_Ridge is None:
                         alpha_Ridge = self.alpha_Ridge
-
+                    if alpha_Ridge_WD is None:
+                        alpha_Ridge_WD = self.alpha_Ridge_WD
                     # Setup Result Lists
                     results = []
                 
@@ -4596,8 +4664,8 @@ class Seismic:
                         # Pipeline
                         # Scale, Ridge # need to optimise alpha
                         var_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
-                        sin_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
-                        cos_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
+                        sin_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge_WD))])
+                        cos_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge_WD))])
                 
                         # Cross Validation
                         cv = KFold(n_splits=5, shuffle=True, random_state=42)

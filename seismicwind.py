@@ -2108,6 +2108,7 @@ class Seismic:
                     self.alpha_Ridge = None
                     self.alpha_Ridge_WD = None
                     self.EN_models = None
+                    self.SVR_models = None
 
                 # Optimisation
                 def optimise_Ridge(self,
@@ -3439,7 +3440,9 @@ class Seismic:
                         epsilon = None,
                         C_SVR_WD = None,
                         gamma_SVR_WD = None,
-                        epsilon_SVR_WD = None):
+                        epsilon_SVR_WD = None,
+                        save_models = False,
+                        file_label = 'test'):
 
                     """
                         Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -3497,7 +3500,7 @@ class Seismic:
                         
                     # Setup Result Lists
                     results = []
-                
+                    self.SVR_models = {}
                     # Bands
                     # Create Bandwidths
                     bands = []
@@ -3623,6 +3626,35 @@ class Seismic:
                         sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
                         cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
                         dir_rmse = np.sqrt(np.mean(dir_fix**2))
+
+                        # Create models trained on entire week
+                                                
+                        final_var_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma=gamma, epsilon=epsilon))])
+                        final_sin_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C_SVR_WD, gamma=gamma_SVR_WD, epsilon=epsilon_SVR_WD))])
+                        final_cos_model = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C_SVR_WD, gamma=gamma_SVR_WD, epsilon=epsilon_SVR_WD))])
+
+                        # Train using the full training period
+                        final_var_model.fit(X_all, y_all[:, 0])
+                        final_sin_model.fit(X_all, y_all[:, 1])
+                        final_cos_model.fit(X_all, y_all[:, 2])
+
+                        if save_models == True:
+                            model_dir = Path("saved_models")
+                            model_dir.mkdir(parents=True, exist_ok=True)
+                            # Save models and their feature settings together
+                            joblib.dump({'var_model': final_var_model,
+                                        'sin_model': final_sin_model,
+                                        'cos_model': final_cos_model,
+                                        'bands': bands,
+                                        'fmin': fmin,
+                                        'fmax': fmax,
+                                        'f_band_width': f_band_width,
+                                        'step_size': step_size,
+                                        'n_bands': n_bands,
+                                        'feature_order': ['Z', 'NS', 'EW']}, 
+                                        model_dir / f"SVR_{station}_{file_label}.joblib")
+                        self.SVR_models[station] = {'var_model': var_model,'sin_model': sin_model,'cos_model': cos_model,'bands': bands}
+                        
                 
                         # R²
                         var_r2 = r2_score(y_var_test, var_pred)
@@ -4042,7 +4074,8 @@ class Seismic:
                        l1_ratio = None,
                        alpha_EN_WD = None,
                        l1_ratio_EN_WD = None,
-                       save_models = False):
+                       save_models = False,
+                       file_label = 'test'):
                     
                     """
                     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -4095,7 +4128,7 @@ class Seismic:
                         l1_ratio_EN_WD = self.l1_ratio_EN_WD
                     # Setup Result Lists
                     results = []
-                    self.final_models = {}
+                    self.EN_models = {}
                 
                     # Bands
                     # Create Bandwidths
@@ -4248,7 +4281,7 @@ class Seismic:
                                         'step_size': step_size,
                                         'n_bands': n_bands,
                                         'feature_order': ['Z', 'NS', 'EW']}, 
-                                        model_dir / f"EN_{station}.joblib")
+                                        model_dir / f"EN_{station}_{file_label}.joblib")
                         self.EN_models[station] = {'var_model': var_model,'sin_model': sin_model,'cos_model': cos_model,'bands': bands}
                         
                         # R²
@@ -4654,19 +4687,25 @@ class Seismic:
                 
                 def predict_model(self, 
                                plotting = True,
-                               model_dir= None):
+                               model_path= None,
+                               model_choice = 'EN'):
                     
-                    if model_dir is not None:
-                        model_dir = Path(model_dir)
                     results = {}
 
                     for station_dict in self.seismic_wind.fft:
                         station = list(station_dict.keys())[0]
                         station_data = station_dict[station][0]
-                        if model_dir is not None:
-                            saved = joblib.load(model_dir / f"EN_{station}.joblib")
+                        # to .joblib file
+                        if model_path is not None:
+                            saved = joblib.load(model_path)
                         else:
-                            saved = self.EN_models[station]
+                            if model_choice == 'EN':
+                                saved = self.EN_models[station]
+                            elif model_choice == 'SVR':
+                                saved = self.SVR_models[station]
+                            else:
+                                print('Invalid Model Choice')
+                                return
 
                         var_model = saved['var_model']
                         sin_model = saved['sin_model']
@@ -4736,7 +4775,7 @@ class Seismic:
                             # WS vs Time
                             plt.figure(figsize=(10, 10))
                             plt.plot(t,  obs_WS, label='Observed WS', linewidth=1.5)
-                            plt.plot(t, pred_WS, label='Predicted WS', linewidth=1.5)
+                            plt.plot(t, pred_WS - WS_bias, label='Predicted WS', linewidth=1.5)
                             plt.fill_between(t, pred_WS - WS_bias - station_results['WS_Std'], 
                                              pred_WS - WS_bias + station_results['WS_Std'],alpha=0.2,
                                              label=r'Predicted Bias-Corrected WS $\pm 1\sigma$')

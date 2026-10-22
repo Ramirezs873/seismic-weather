@@ -30,6 +30,7 @@ from sklearn.linear_model import ElasticNetCV
 from sklearn.model_selection import RandomizedSearchCV
 import matplotlib
 from obspy.clients.fdsn import Client
+import joblib
 
 
 class Seismic:
@@ -2104,6 +2105,7 @@ class Seismic:
                     self.l1_ratio_EN_WD = None
                     self.alpha_Ridge = None
                     self.alpha_Ridge_WD = None
+                    self.EN_models = None
 
                 # Optimisation
                 def optimise_Ridge(self,
@@ -4034,7 +4036,8 @@ class Seismic:
                        alpha_EN = None,
                        l1_ratio = None,
                        alpha_EN_WD = None,
-                       l1_ratio_EN_WD = None):
+                       l1_ratio_EN_WD = None,
+                       save_models = False):
                     
                     """
                     Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
@@ -4087,6 +4090,7 @@ class Seismic:
                         l1_ratio_EN_WD = self.l1_ratio_EN_WD
                     # Setup Result Lists
                     results = []
+                    self.final_models = {}
                 
                     # Bands
                     # Create Bandwidths
@@ -4212,7 +4216,36 @@ class Seismic:
                         sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
                         cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
                         dir_rmse = np.sqrt(np.mean(dir_fix**2))
-                
+                        
+                        
+                        # Create models trained on entire week
+                        
+                        final_var_model = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio))])
+                        final_sin_model = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=alpha_EN_WD,l1_ratio=l1_ratio_EN_WD))])
+                        final_cos_model = Pipeline([('scaler', StandardScaler()),('enet', ElasticNet(alpha=alpha_EN_WD,l1_ratio=l1_ratio_EN_WD))])
+
+                        # Train using the full training period
+                        final_var_model.fit(X_all, y_all[:, 0])
+                        final_sin_model.fit(X_all, y_all[:, 1])
+                        final_cos_model.fit(X_all, y_all[:, 2])
+
+                        if save_models == True:
+                            model_dir = Path("saved_models")
+                            model_dir.mkdir(parents=True, exist_ok=True)
+                            # Save models and their feature settings together
+                            joblib.dump({'var_model': final_var_model,
+                                        'sin_model': final_sin_model,
+                                        'cos_model': final_cos_model,
+                                        'bands': bands,
+                                        'fmin': fmin,
+                                        'fmax': fmax,
+                                        'f_band_width': f_band_width,
+                                        'step_size': step_size,
+                                        'n_bands': n_bands,
+                                        'feature_order': ['Z', 'NS', 'EW']}, 
+                                        model_dir / f"EN_{station}.joblib")
+                        self.EN_models[station] = {'var_model': var_model,'sin_model': sin_model,'cos_model': cos_model,'bands': bands}
+                        
                         # R²
                         var_r2 = r2_score(y_var_test, var_pred)
                         sin_r2 = r2_score(y_sin_test, sin_pred)
@@ -4613,6 +4646,193 @@ class Seismic:
                             print(f"{component}: {frequency[0]:.1f} Hz, importance = {var_importance[index]:.4f}")
                 
                     return results
+                
+                def predict_model(self, 
+                               plotting = True,
+                               model_dir= None):
+                    
+                    if model_dir is not None:
+                        model_dir = Path(model_dir)
+                    results = {}
+
+                    for station_dict in self.seismic_wind.fft:
+                        station = list(station_dict.keys())[0]
+                        station_data = station_dict[station][0]
+                        if model_dir is not None:
+                            saved = joblib.load(model_dir / f"EN_{station}.joblib")
+                        else:
+                            saved = self.EN_models[station]
+
+                        var_model = saved['var_model']
+                        sin_model = saved['sin_model']
+                        cos_model = saved['cos_model']
+                        bands = saved['bands']
+
+                        EW_power = station_data['EW']
+                        NS_power = station_data['NS']
+                        Z_power = station_data['Z']
+                        freq = station_data['freq']
+
+                        n_samples = Z_power.shape[0]
+                        X_Z = np.zeros((n_samples, len(bands)))
+                        X_NS = np.zeros((n_samples, len(bands)))
+                        X_EW = np.zeros((n_samples, len(bands)))
+
+                        # Apply bandwidths to data
+                        for i, (f1,f2) in enumerate(bands):
+                            band_width = (freq >= f1) & (freq < f2)
+                
+                            # Convert to log to better inspect power scales and apply bandwidth
+                            # [:, band_width], select frequencies and slice unwanted freq data from the row
+                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+                
+                        # Stack all together to process all together as a larger dataset
+                        X_all = np.column_stack([X_Z, X_NS, X_EW])
+
+                        # Predict!
+                        pred_WS = var_model.predict(X_all)
+                        pred_sin = sin_model.predict(X_all)
+                        pred_cos = cos_model.predict(X_all)
+                        pred_WD = np.rad2deg(np.arctan2(pred_sin, pred_cos)) % 360
+
+                        pred_WS = np.round(pred_WS, decimals=1)
+                        pred_WD = np.round(pred_WD, decimals=-1) % 360
+
+                        station_results = {'Predicted_WS': pred_WS, 'Predicted_WD': pred_WD}
+
+                        # Evaluate
+                        
+                        station_results['Observed_WS'] = np.asarray(station_data['aws_values'])
+                        
+                        WS_error = pred_WS - station_results['Observed_WS']
+                        station_results['WS_R2'] = r2_score(station_results['Observed_WS'], pred_WS) 
+                        station_results['WS_RMSE'] = np.sqrt(np.mean(WS_error**2))
+                        station_results['WS_MAE'] = np.mean(np.abs(WS_error))
+                        station_results['WS_Std'] = np.std(WS_error, ddof=1)
+                 
+                        station_results['Observed_WD'] = np.asarray(station_data['wind_direction'])
+                        
+                        WD_error = (pred_WD - station_results['Observed_WD'] + 180) % 360 - 180
+                        station_results['WD_MAE'] = np.mean(np.abs(WD_error))
+                        station_results['WD_RMSE'] = np.sqrt(np.mean(WD_error**2))
+                        station_results['WD_Std'] = np.std(WD_error, ddof=1)
+
+                        results[station] = station_results
+
+                        if plotting == True: 
+                            obs_WS = station_results['Observed_WS']
+                            obs_WD = station_results['Observed_WD']
+                            t = station_data['time']
+                            WS_bias = np.mean(WS_error)
+
+                            # WS vs Time
+                            plt.figure(figsize=(10, 10))
+                            plt.plot(t,  obs_WS, label='Observed WS', linewidth=1.5)
+                            plt.plot(t, pred_WS, label='Predicted WS', linewidth=1.5)
+                            plt.fill_between(t, pred_WS - WS_bias - station_results['WS_Std'], 
+                                             pred_WS - WS_bias + station_results['WS_Std'],alpha=0.2,
+                                             label=r'Predicted Bias-Corrected WS $\pm 1\sigma$')
+                            plt.ylabel('Wind Speed (km/hr)')
+                            plt.title(f'{station} - Wind Speed')
+                            plt.xlabel('Time')
+                            plt.legend()
+
+
+                            # WS Obs vs Pred
+                            plt.figure(figsize=(10, 10))
+                            plt.scatter(obs_WS, pred_WS,alpha=0.7, s=100, label='Observed vs Predicted')
+                            # y = x line
+                            limits = [min(obs_WS.min(), pred_WS.min()),
+                                    max(obs_WS.max(), pred_WS.max())]
+                            plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
+                            plt.xlabel('Observed Wind Speed (km/hr)', fontsize=20)
+                            plt.ylabel('Predicted Wind Speed (km/hr)', fontsize=20)
+                            plt.title(f'{station} Wind Speed', fontsize=25)
+                            plt.xticks(fontsize=20)
+                            plt.yticks(fontsize=20)
+                            plt.legend(fontsize=16, loc='upper left')
+                            plt.grid(alpha=0.3)
+                            plt.tight_layout()
+
+                            # WS Error vs Time
+                            plt.figure(figsize=(12, 5))
+                            plt.plot(t, WS_error)
+                            plt.axhline(0, color='red', linestyle='--')
+                            plt.xlabel('Time')
+                            plt.ylabel('Wind Speed Error (km/hr)')
+                            plt.title(f'{station} Wind Speed Prediction Error')
+                            plt.grid(alpha=0.3)
+                            plt.tight_layout()
+                            plt.show()
+
+                            # WD Error vs Time
+                            plt.figure(figsize=(12, 5))
+                            plt.plot(t, WD_error)
+                            plt.axhline(0, color='red', linestyle='--')
+                            plt.axhline(180, color='grey', linestyle=':')
+                            plt.axhline(-180, color='grey', linestyle=':')
+                            plt.xlabel('Time')
+                            plt.ylabel('Wind Direction Error (°)')
+                            plt.title(f'{station} Wind Direction Prediction Error')
+                            plt.grid(alpha=0.3)
+                            plt.tight_layout()
+                            plt.show()
+
+                            # WD Obs vs Pred
+                            plt.figure(figsize=(10, 10))
+                            plt.scatter(obs_WD, pred_WD,alpha=0.7, s=100, label='Observed vs Predicted')
+                            # y = x line
+                            limits = [min(obs_WD.min(), pred_WD.min()),
+                                    max(obs_WD.max(), pred_WD.max())]
+                            plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
+                            plt.xlabel('Observed Wind Direction (°)', fontsize=20)
+                            plt.ylabel('Predicted Wind Direction (°)', fontsize=20)
+                            plt.title(f'{station} Wind Direction', fontsize=25)
+                            plt.xticks(fontsize=20)
+                            plt.yticks(fontsize=20)
+                            plt.legend(fontsize=16, loc='upper left')
+                            plt.grid(alpha=0.3)
+                            plt.tight_layout()
+
+                            # Polar plot
+                            cardinals = {"N": 0,           
+                                        "E": (np.pi / 2),
+                                        "S": (np.pi),
+                                        "W": (3 * np.pi / 2)}
+                            plt.figure(figsize=(10,6))
+                            ax = plt.subplot(projection='polar')
+                            plt.polar()              
+                            obs = ax.scatter(np.deg2rad(obs_WD), obs_WS, alpha=0.7,s = 60, label = f'Observed Wind', marker='x')
+                            pred = ax.scatter(np.deg2rad(pred_WD), pred_WS, alpha=0.7, s = 60, label = f'Predicted Wind', marker='^')
+                            for i in range(len(obs_WD)):
+                                ax.plot([np.deg2rad(obs_WD[i]), np.deg2rad(pred_WD[i])], [obs_WS[i], pred_WS[i]], color='grey', alpha=1, linewidth=0.8)
+                            # Make it pretty
+                            ax.set_theta_zero_location('N')
+                            ax.set_theta_direction(-1)
+                            ax.set_ylabel(f'Wind Speed', labelpad=55, fontsize = 12)
+                            ax.set_title(f"{station}: Wind Speed and Direction", pad = 60, fontsize = 25)
+                            ax.set_rlabel_position(0)
+                            ax.tick_params(labelsize = 12)
+                            rmax = ax.get_rmax()
+                            # Add cardinal direction labels
+                            for label, angle in cardinals.items():
+                                            ax.text(
+                                                angle,
+                                                rmax * 1.3,
+                                                label,
+                                                ha="center",
+                                                va="center",
+                                                fontsize=15,
+                                                fontweight="bold",
+                                                clip_on=False)                            
+                            plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
+                            plt.tight_layout()
+
+                    return results
+
 
                 def Ridge(self,
                           fmin = 1,

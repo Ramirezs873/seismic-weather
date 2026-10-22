@@ -31,6 +31,8 @@ from sklearn.model_selection import RandomizedSearchCV
 import matplotlib
 from obspy.clients.fdsn import Client
 import joblib
+from sklearn.exceptions import ConvergenceWarning
+import warnings
 
 
 class Seismic:
@@ -2285,6 +2287,9 @@ class Seismic:
                         WS_only (bool):
                             True/False. False to consider speed and direction.
                     """
+
+                    warnings.filterwarnings('ignore', category=ConvergenceWarning)
+
                     # Bands
                     # Create Bandwidths
                     bands = []

@@ -4785,8 +4785,8 @@ class Seismic:
                             plt.xlabel('Time')
                             plt.legend()
                             
-                            print(f'R^2 Obs and bias-corrected Prediction: {WS_correlation**2:.3f}')
-                            print(f'p value Obs and bias-corrected Prediction: {WS_p_value:.3f}')
+                            print(f'R^2 Obs and bias-corrected Prediction: {WS_correlation**2}')
+                            print(f'p value Obs and bias-corrected Prediction: {WS_p_value}')
 
                             # WS Obs vs Pred
                             plt.figure(figsize=(10, 10))

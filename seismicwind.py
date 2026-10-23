@@ -4776,7 +4776,7 @@ class Seismic:
                             # WS vs Time
                             plt.figure(figsize=(10, 10))
                             plt.plot(t,  obs_WS, label='Observed WS', linewidth=1.5, color = 'royalblue')
-                            plt.plot(t, pred_WS - WS_bias, label='Predicted WS', linewidth=1.5, color = 'orange')
+                            plt.plot(t, pred_WS - WS_bias, label='Bias Corrected Predicted WS', linewidth=1.5, color = 'orange')
                             plt.fill_between(t, pred_WS - WS_bias - station_results['WS_Std'], 
                                              pred_WS - WS_bias + station_results['WS_Std'],alpha=0.2, color = 'peru',
                                              label=r'Bias Corrected Predicted WS $\pm 1\sigma$')

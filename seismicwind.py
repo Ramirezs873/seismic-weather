@@ -33,7 +33,7 @@ from obspy.clients.fdsn import Client
 import joblib
 from sklearn.exceptions import ConvergenceWarning
 import warnings
-
+from scipy.stats import pearsonr
 
 class Seismic:
 
@@ -4688,7 +4688,8 @@ class Seismic:
                 def predict_model(self, 
                                plotting = True,
                                model_path= None,
-                               model_choice = 'EN'):
+                               model_choice = 'EN',
+                               date = 'Time Period'):
                     
                     results = {}
 
@@ -4756,7 +4757,6 @@ class Seismic:
                         station_results['WS_RMSE'] = np.sqrt(np.mean(WS_error**2))
                         station_results['WS_MAE'] = np.mean(np.abs(WS_error))
                         station_results['WS_Std'] = np.std(WS_error, ddof=1)
-                 
                         station_results['Observed_WD'] = np.asarray(station_data['wind_direction'])
                         
                         WD_error = (pred_WD - station_results['Observed_WD'] + 180) % 360 - 180
@@ -4771,19 +4771,22 @@ class Seismic:
                             obs_WD = station_results['Observed_WD']
                             t = station_data['time']
                             WS_bias = np.mean(WS_error)
+                            WS_correlation, WS_p_value = pearsonr(obs_WS, pred_WS - WS_bias)
 
                             # WS vs Time
                             plt.figure(figsize=(10, 10))
-                            plt.plot(t,  obs_WS, label='Observed WS', linewidth=1.5)
-                            plt.plot(t, pred_WS - WS_bias, label='Predicted WS', linewidth=1.5)
+                            plt.plot(t,  obs_WS, label='Observed WS', linewidth=1.5, color = 'royalblue')
+                            plt.plot(t, pred_WS - WS_bias, label='Predicted WS', linewidth=1.5, color = 'orange')
                             plt.fill_between(t, pred_WS - WS_bias - station_results['WS_Std'], 
-                                             pred_WS - WS_bias + station_results['WS_Std'],alpha=0.2,
-                                             label=r'Predicted Bias-Corrected WS $\pm 1\sigma$')
+                                             pred_WS - WS_bias + station_results['WS_Std'],alpha=0.2, color = 'peru',
+                                             label=r'Bias Corrected Predicted WS $\pm 1\sigma$')
                             plt.ylabel('Wind Speed (km/hr)')
-                            plt.title(f'{station} - Wind Speed')
+                            plt.title(f'Wind Speed Prediction and Observed: {date}')
                             plt.xlabel('Time')
                             plt.legend()
-
+                            
+                            print(f'R^2 Obs and bias-corrected Prediction: {WS_correlation**2:.3f}')
+                            print(f'p value Obs and bias-corrected Prediction: {WS_p_value:.3f}')
 
                             # WS Obs vs Pred
                             plt.figure(figsize=(10, 10))
@@ -4794,7 +4797,7 @@ class Seismic:
                             plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
                             plt.xlabel('Observed Wind Speed (km/hr)', fontsize=20)
                             plt.ylabel('Predicted Wind Speed (km/hr)', fontsize=20)
-                            plt.title(f'{station} Wind Speed', fontsize=25)
+                            plt.title(f'Obs vs Pred Wind Speed: {date} ', fontsize=25)
                             plt.xticks(fontsize=20)
                             plt.yticks(fontsize=20)
                             plt.legend(fontsize=16, loc='upper left')
@@ -4807,7 +4810,7 @@ class Seismic:
                             plt.axhline(0, color='red', linestyle='--')
                             plt.xlabel('Time')
                             plt.ylabel('Wind Speed Error (km/hr)')
-                            plt.title(f'{station} Wind Speed Prediction Error')
+                            plt.title(f'Wind Speed Prediction Error: {date}')
                             plt.grid(alpha=0.3)
                             plt.tight_layout()
                             plt.show()
@@ -4820,7 +4823,7 @@ class Seismic:
                             plt.axhline(-180, color='grey', linestyle=':')
                             plt.xlabel('Time')
                             plt.ylabel('Wind Direction Error (°)')
-                            plt.title(f'{station} Wind Direction Prediction Error')
+                            plt.title(f'Wind Direction Prediction Error: {date} ')
                             plt.grid(alpha=0.3)
                             plt.tight_layout()
                             plt.show()
@@ -4834,7 +4837,7 @@ class Seismic:
                             plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
                             plt.xlabel('Observed Wind Direction (°)', fontsize=20)
                             plt.ylabel('Predicted Wind Direction (°)', fontsize=20)
-                            plt.title(f'{station} Wind Direction', fontsize=25)
+                            plt.title(f'Obs vs Pred Wind Direction {date}', fontsize=25)
                             plt.xticks(fontsize=20)
                             plt.yticks(fontsize=20)
                             plt.legend(fontsize=16, loc='upper left')
@@ -4857,7 +4860,7 @@ class Seismic:
                             ax.set_theta_zero_location('N')
                             ax.set_theta_direction(-1)
                             ax.set_ylabel(f'Wind Speed', labelpad=55, fontsize = 12)
-                            ax.set_title(f"{station}: Wind Speed and Direction", pad = 60, fontsize = 25)
+                            ax.set_title(f"Wind Speed and Direction: {date}", pad = 60, fontsize = 25)
                             ax.set_rlabel_position(0)
                             ax.tick_params(labelsize = 12)
                             rmax = ax.get_rmax()
@@ -4876,7 +4879,6 @@ class Seismic:
                             plt.tight_layout()
 
                     return results
-
 
                 def Ridge(self,
                           fmin = 1,

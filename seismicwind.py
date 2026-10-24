@@ -4764,21 +4764,35 @@ class Seismic:
                         station_results['WD_RMSE'] = np.sqrt(np.mean(WD_error**2))
                         station_results['WD_Std'] = np.std(WD_error, ddof=1)
 
+
+                        obs_WS = station_results['Observed_WS']
+                        obs_WD = station_results['Observed_WD']
+                        WS_bias = np.mean(WS_error)
+                        WS_correlation, WS_p_value = pearsonr(obs_WS, pred_WS - WS_bias)
+                        WS_error_corrected = pred_WS - WS_bias - station_results['Observed_WS']
+                        pred_WS_bias_corrected = pred_WS - WS_bias 
+                        WD_bias = np.rad2deg(np.arctan2(np.mean(np.sin(np.deg2rad(WD_error))), np.mean(np.cos(np.deg2rad(WD_error)))))
+                        pred_WD_bias_corrected = (pred_WD - WD_bias) % 360
+                        WD_error_corrected = (pred_WD_bias_corrected - station_results['Observed_WD'] + 180) % 360 - 180
+                        WD_Std_corrected = np.std(WD_error_corrected, ddof=1)
+
+                        station_results['WD_Bias'] = WD_bias
+                        station_results['WD_Std_corrected'] = WD_Std_corrected  
+                        station_results['WD_MAE_corrected'] = np.mean(np.abs(WD_error_corrected))
+
+                        
                         results[station] = station_results
 
                         if plotting == True: 
-                            obs_WS = station_results['Observed_WS']
-                            obs_WD = station_results['Observed_WD']
+                            
                             t = station_data['time']
-                            WS_bias = np.mean(WS_error)
-                            WS_correlation, WS_p_value = pearsonr(obs_WS, pred_WS - WS_bias)
-
+                    
                             # WS vs Time
                             plt.figure(figsize=(10, 10))
                             plt.plot(t,  obs_WS, label='Observed WS', linewidth=1.5, color = 'royalblue')
-                            plt.plot(t, pred_WS - WS_bias, label='Bias Corrected Predicted WS', linewidth=1.5, color = 'orange')
-                            plt.fill_between(t, pred_WS - WS_bias - station_results['WS_Std'], 
-                                             pred_WS - WS_bias + station_results['WS_Std'],alpha=0.2, color = 'peru',
+                            plt.plot(t, pred_WS_bias_corrected, label='Bias Corrected Predicted WS', linewidth=1.5, color = 'orange')
+                            plt.fill_between(t, pred_WS_bias_corrected - station_results['WS_Std'], 
+                                             pred_WS_bias_corrected + station_results['WS_Std'],alpha=0.2, color = 'peru',
                                              label=r'Bias Corrected Predicted WS $\pm 1\sigma$')
                             plt.ylabel('Wind Speed (km/hr)')
                             plt.title(f'Wind Speed Prediction and Observed: {date}')
@@ -4790,13 +4804,13 @@ class Seismic:
 
                             # WS Obs vs Pred
                             plt.figure(figsize=(10, 10))
-                            plt.scatter(obs_WS, pred_WS,alpha=0.7, s=100, label='Observed vs Predicted')
+                            plt.scatter(obs_WS, pred_WS_bias_corrected ,alpha=0.7, s=100, label='Observed vs Predicted')
                             # y = x line
-                            limits = [min(obs_WS.min(), pred_WS.min()),
-                                    max(obs_WS.max(), pred_WS.max())]
+                            limits = [min(obs_WS.min(), pred_WS_bias_corrected.min()),
+                                    max(obs_WS.max(), pred_WS_bias_corrected.max())]
                             plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
                             plt.xlabel('Observed Wind Speed (km/hr)', fontsize=20)
-                            plt.ylabel('Predicted Wind Speed (km/hr)', fontsize=20)
+                            plt.ylabel('Bias-Corrected Predicted Wind Speed (km/hr)', fontsize=20)
                             plt.title(f'Obs vs Pred Wind Speed: {date} ', fontsize=25)
                             plt.xticks(fontsize=20)
                             plt.yticks(fontsize=20)
@@ -4806,7 +4820,7 @@ class Seismic:
 
                             # WS Error vs Time
                             plt.figure(figsize=(12, 5))
-                            plt.plot(t, WS_error)
+                            plt.plot(t, WS_error_corrected)
                             plt.axhline(0, color='red', linestyle='--')
                             plt.xlabel('Time')
                             plt.ylabel('Wind Speed Error (km/hr)')
@@ -4817,23 +4831,23 @@ class Seismic:
 
                             # WD Error vs Time
                             plt.figure(figsize=(12, 5))
-                            plt.plot(t, WD_error)
+                            plt.plot(t, WD_error_corrected)
                             plt.axhline(0, color='red', linestyle='--')
                             plt.axhline(180, color='grey', linestyle=':')
                             plt.axhline(-180, color='grey', linestyle=':')
                             plt.xlabel('Time')
-                            plt.ylabel('Wind Direction Error (°)')
-                            plt.title(f'Wind Direction Prediction Error: {date} ')
+                            plt.ylabel('Bias-corrected WD Error (°)')
+                            plt.title(f'Bias-corrected Wind Direction Error: {date} ')
                             plt.grid(alpha=0.3)
                             plt.tight_layout()
                             plt.show()
 
                             # WD Obs vs Pred
                             plt.figure(figsize=(10, 10))
-                            plt.scatter(obs_WD, pred_WD,alpha=0.7, s=100, label='Observed vs Predicted')
+                            plt.scatter(obs_WD, pred_WD_bias_corrected,alpha=0.7, s=100, label='Observed vs Predicted')
                             # y = x line
-                            limits = [min(obs_WD.min(), pred_WD.min()),
-                                    max(obs_WD.max(), pred_WD.max())]
+                            limits = [min(obs_WD.min(), pred_WD_bias_corrected.min()),
+                                    max(obs_WD.max(), pred_WD_bias_corrected.max())]
                             plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
                             plt.xlabel('Observed Wind Direction (°)', fontsize=20)
                             plt.ylabel('Predicted Wind Direction (°)', fontsize=20)
@@ -4853,9 +4867,9 @@ class Seismic:
                             ax = plt.subplot(projection='polar')
                             plt.polar()              
                             obs = ax.scatter(np.deg2rad(obs_WD), obs_WS, alpha=0.7,s = 60, label = f'Observed Wind', marker='x')
-                            pred = ax.scatter(np.deg2rad(pred_WD), pred_WS, alpha=0.7, s = 60, label = f'Predicted Wind', marker='^')
-                            for i in range(len(obs_WD)):
-                                ax.plot([np.deg2rad(obs_WD[i]), np.deg2rad(pred_WD[i])], [obs_WS[i], pred_WS[i]], color='grey', alpha=1, linewidth=0.8)
+                            pred = ax.scatter(np.deg2rad(pred_WD_bias_corrected), pred_WS_bias_corrected, alpha=0.7, s = 60, label = f'Predicted Wind', marker='^')
+                            for i in range(len(pred_WD_bias_corrected)):
+                                ax.plot([np.deg2rad(obs_WD[i]), np.deg2rad(pred_WD_bias_corrected[i])], [obs_WS[i], pred_WS_bias_corrected[i]], color='grey', alpha=1, linewidth=0.8)
                             # Make it pretty
                             ax.set_theta_zero_location('N')
                             ax.set_theta_direction(-1)

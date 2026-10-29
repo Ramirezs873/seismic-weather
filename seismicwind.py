@@ -1675,78 +1675,68 @@ class Seismic:
 
             return self.aws
 
-
+        
         def get_var(self,
                     variable='Wind speed in km/h',
-                    year=None, 
-                    month=None, 
-                    day=None,
-                    hour=None):
-            
-            # Check if time inputs are single valued or a range.
-            # Year
-            if isinstance(year, (tuple, list)) and len(year) == 2: 
-                start_year, end_year = year 
-                df_slice = self.aws[(self.aws['datetime'].dt.year >= start_year) & 
-                                (self.aws['datetime'].dt.year <= end_year) ].copy()
-            elif year is None or year < 2010 or year > 2025:
-                df_slice = self.aws.copy()
-            else:
-                df_slice = self.aws[self.aws['datetime'].dt.year == year].copy()
-            # Month
-            if isinstance(month, (tuple, list)) and len(month) == 2: 
-                start_month, end_month = month 
-                df_slice = df_slice[(df_slice['datetime'].dt.month >= start_month) & 
-                                (df_slice['datetime'].dt.month <= end_month) ].copy()
-            elif isinstance(month, int): 
-                df_slice = df_slice[df_slice['datetime'].dt.month == month].copy()
-            # Day
-            if isinstance(day, (tuple, list)) and len(day) == 2:
-                start_day, end_day = day
-                df_slice = df_slice[(df_slice['datetime'].dt.day >= start_day) & 
-                                    (df_slice['datetime'].dt.day <= end_day)].copy()
-            elif isinstance(day, int):
-                df_slice = df_slice[df_slice['datetime'].dt.day == day].copy()
-            # Hour
-            if isinstance(hour, (tuple, list)) and len(hour) == 2:
-                start_hour, end_hour = hour
-                df_slice = df_slice[(df_slice['datetime'].dt.hour >= start_hour) & 
-                                    (df_slice['datetime'].dt.hour <= end_hour)].copy()
-            elif isinstance(hour, int):
-                df_slice = df_slice[df_slice['datetime'].dt.hour == hour].copy()
-            
-            # Check if there is data
-            if df_slice.empty: 
-                print("No data available for the selected time period.") 
+                    t_start=None,
+                    t_end=None):
+
+            """
+            Gathers variable data from the loaded aws dataset for a selected time period
+
+            Parameters:
+                variable (str):
+                    Variable to gather. e.g 'Wind speed in km/h'
+                t_start (UTC):
+                    Start time in UTC.
+                t_end (UTC):
+                    End time in UTC.
+            """
+
+            # Start with all AWS data
+            df_slice = self.aws.copy()
+
+            # Filter by UTC start and end times
+            if t_start is not None:
+                t_start = pd.Timestamp(t_start.datetime)
+                df_slice = df_slice[df_slice['datetime'] >= t_start]
+
+            if t_end is not None:
+                t_end = pd.Timestamp(t_end.datetime)
+                df_slice = df_slice[df_slice['datetime'] <= t_end]
+
+            # Check if data exists
+            if df_slice.empty:
+                print("No data available for the selected time period.")
                 return
-        
-            # Check if variable exists in the DataFrame
+
+            # Check if variable exists
             if variable not in df_slice.columns:
                 print(f"Variable '{variable}' not found in the DataFrame.")
                 return
-            
+
             # Convert to numeric
             df_slice[variable] = pd.to_numeric(df_slice[variable], errors='coerce')
-            var = df_slice[variable]
-        
-            df_slice['Wind direction in degrees true'] = pd.to_numeric(df_slice['Wind direction in degrees true'], errors='coerce')
+
+            df_slice['Wind direction in degrees true'] = pd.to_numeric(
+                df_slice['Wind direction in degrees true'], errors='coerce')
+
             df_slice['Wind direction in degrees true'] %= 360
-            WD = df_slice['Wind direction in degrees true']
-        
-            
-            var = var.to_numpy()
-            WD = WD.to_numpy()
-        
+
+            var = df_slice[variable].to_numpy()
+            WD = df_slice['Wind direction in degrees true'].to_numpy()
+            time = df_slice['datetime'].to_numpy()
+
             # Clean Data
             valid_mask = ~np.isnan(var)
-        
+
             var = var[valid_mask]
             WD = WD[valid_mask]
-            time = df_slice['datetime'].to_numpy()[valid_mask]
+            time = time[valid_mask]
 
             self.wd = [time, var, WD]
             self.seismic_wind.wd = self.wd
-            
+
             return self.wd
 
 

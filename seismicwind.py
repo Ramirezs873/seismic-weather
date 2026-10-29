@@ -72,7 +72,8 @@ class Seismic:
                  t_end,
                  username = None,
                  password = None,
-                 file_name = None):
+                 file_name = None,
+                 save = True):
         """
         Gather seismic waveform data from a FDSN client,
         or from a local file if the file name already exists
@@ -102,6 +103,8 @@ class Seismic:
                 Password to access data (if required).
             file_name (str):
                 Filename to save the data as.
+            save (bool):
+                True/False. True to save as mseed file.
             
         Returns:
             wave_dict (dict):
@@ -144,9 +147,10 @@ class Seismic:
                                             starttime=t_start, 
                                             endtime=t_end) 
 
-            # Write to file
-            station_data.write(str(file_path), format = 'MSEED')
-            print(f"Saved to: {file_path}")
+            if save == True:
+                # Write to file
+                station_data.write(str(file_path), format = 'MSEED')
+                print(f"Saved to: {file_path}")
         
         # Write to a dictionary
         wave_dict = defaultdict(list) 

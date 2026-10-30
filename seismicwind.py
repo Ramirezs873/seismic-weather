@@ -2084,11 +2084,11 @@ class Seismic:
                     self.min_samples_split = None
                     self.min_samples_leaf = None
                     self.max_features = None
-                    self.n_estimators_WD = None,
-                    self.max_depth_WD = None, 
-                    self.min_samples_split_WD = None, 
-                    self.min_samples_leaf_WD = None, 
-                    self.max_features_WD = None,
+                    self.n_estimators_WD = None
+                    self.max_depth_WD = None
+                    self.min_samples_split_WD = None
+                    self.min_samples_leaf_WD = None
+                    self.max_features_WD = None
                     self.C = None
                     self.gamma = None
                     self.epsilon = None
@@ -3445,6 +3445,7 @@ class Seismic:
                         plot_residuals = True,
                         plot_power_aws = True,
                         variable_name = 'AWS Wind Speed (km/hr)',
+                        spectra = None,
                         C = None,
                         gamma = None,
                         epsilon = None,
@@ -3488,11 +3489,17 @@ class Seismic:
                                 Plot the relationship between seismic power and AWS values.
                             variable_name (str):
                                 The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
+                            spectra (dict):
+                                A dictionary containing fft output.
                     
                         Outputs:
                             results (list):
                                 A list of dictionaries containing information about all the correlation results for each station.
                         """
+
+                    # option to input spectra from a dict
+                    if spectra is not None:
+                        self.seismic_wind.fft = [spectra]
 
                     # Setup Model Parameters
                     if C is None:
@@ -3530,14 +3537,23 @@ class Seismic:
                     for station_dict in self.seismic_wind.fft:
                 
                         # Setup Variables
-                        station = list(station_dict.keys())[0] 
-                        EW_power = station_dict[station][0]['EW']
-                        NS_power = station_dict[station][0]['NS']
-                        Z_power = station_dict[station][0]['Z']
-                        freq = station_dict[station][0]['freq']
-                        aws_values = station_dict[station][0]['aws_values']
-                        wind_direction = station_dict[station][0]['wind_direction']
-                
+                        if spectra is not None:
+                            station = list(station_dict.keys())[0] 
+                            EW_power = station_dict[station]['EW']
+                            NS_power = station_dict[station]['NS']
+                            Z_power = station_dict[station]['Z']
+                            freq = station_dict[station]['freq']
+                            aws_values = station_dict[station]['aws_values']
+                            wind_direction = station_dict[station]['wind_direction']
+                        else:
+                            station = list(station_dict.keys())[0] 
+                            EW_power = station_dict[station][0]['EW']
+                            NS_power = station_dict[station][0]['NS']
+                            Z_power = station_dict[station][0]['Z']
+                            freq = station_dict[station][0]['freq']
+                            aws_values = station_dict[station][0]['aws_values']
+                            wind_direction = station_dict[station][0]['wind_direction']
+
                         # Angle wrap around problem
                         dir_radians = np.deg2rad(wind_direction)
                         dir_sin = np.sin(dir_radians)
@@ -3649,7 +3665,7 @@ class Seismic:
                         final_cos_model.fit(X_all, y_all[:, 2])
 
                         if save_models == True:
-                            model_dir = Path(self.config["seismic_data_path"]) if self.config else Path(".")
+                            model_dir = Path(self.seismic_wind.seismic.config["seismic_data_path"]) if self.seismic_wind.seismic.config else Path(".")
                             model_dir.mkdir(parents=True, exist_ok=True)
                             # Save models and their feature settings together
                             joblib.dump({'var_model': final_var_model,

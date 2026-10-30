@@ -2435,7 +2435,8 @@ class Seismic:
                                 step_size = 1,
                                 n_splits = 5,
                                 min_WS = None,
-                                WS_only = True):
+                                WS_only = True,
+                                spectra = None):
                     """
                     Optimises the support vector regression model parameters for best CV R2 from seismic spectra and aws inputs.
 
@@ -2454,8 +2455,14 @@ class Seismic:
                             Minimum wind speed (km/hr) to be considered in analysis.
                         WS_only (bool):
                             True/False. False to consider speed and direction.
+                        spectra (dict):
+                            A dictionary containing fft output.
                     """
                     
+                    # option to input spectra from a dict
+                    if spectra is not None:
+                        self.seismic_wind.fft = [spectra]
+
                     # Bands
                     # Create Bandwidths
                     bands = []
@@ -2473,15 +2480,24 @@ class Seismic:
                 
                     # Loop through stations
                     for station_dict in self.seismic_wind.fft:
-                
+                        
                         # Setup Variables
-                        station = list(station_dict.keys())[0] 
-                        EW_power = station_dict[station][0]['EW']
-                        NS_power = station_dict[station][0]['NS']
-                        Z_power = station_dict[station][0]['Z']
-                        freq = station_dict[station][0]['freq']
-                        aws_values = station_dict[station][0]['aws_values']
-                        wind_direction = station_dict[station][0]['wind_direction']
+                        if spectra is not None:
+                            station = list(station_dict.keys())[0] 
+                            EW_power = station_dict[station]['EW']
+                            NS_power = station_dict[station]['NS']
+                            Z_power = station_dict[station]['Z']
+                            freq = station_dict[station]['freq']
+                            aws_values = station_dict[station]['aws_values']
+                            wind_direction = station_dict[station]['wind_direction']
+                        else:
+                            station = list(station_dict.keys())[0] 
+                            EW_power = station_dict[station][0]['EW']
+                            NS_power = station_dict[station][0]['NS']
+                            Z_power = station_dict[station][0]['Z']
+                            freq = station_dict[station][0]['freq']
+                            aws_values = station_dict[station][0]['aws_values']
+                            wind_direction = station_dict[station][0]['wind_direction']
                 
                         # Angle wrap around problem
                         dir_radians = np.deg2rad(wind_direction)
@@ -3633,7 +3649,7 @@ class Seismic:
                         final_cos_model.fit(X_all, y_all[:, 2])
 
                         if save_models == True:
-                            model_dir = Path("saved_models")
+                            model_dir = Path(self.config["seismic_data_path"]) if self.config else Path(".")
                             model_dir.mkdir(parents=True, exist_ok=True)
                             # Save models and their feature settings together
                             joblib.dump({'var_model': final_var_model,

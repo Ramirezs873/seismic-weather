@@ -2072,6 +2072,118 @@ class Seismic:
 
                 return self.fft
             
+            def no_aws_spectra_fft(self):
+                
+                """
+                Trim 30 minute segments of seismic data.
+                Apply a real fast fourier transform to compute the frequency spectrum 
+                for each seismic component and calculate the powerfor each time step. 
+            
+                Parameters:
+                    seismic_mseed_file (str):
+                        Title of saved mseed file.
+                    pad_value (float):
+                        Value to use for padding.
+            
+                Returns:
+                    all_spectra (list):
+                        A list of dictionaries containing the frequency and power 
+                        for each component (EW, NS, Z) for each station and time period.
+                """
+
+                # Wave_dict
+                wave_dict = self.seismic.st
+
+                    # Setup 
+                station_list = list(wave_dict.keys())
+                
+                # EW, NS, Z components following real fast fourier transform (RFFT)
+                all_spectra = []
+            
+                # Loop through all stations
+                for station in station_list:
+                    
+                    spectra = []
+            
+                    # Organise Streams
+                    st = Stream(wave_dict[station])
+            
+                    # Puts in alphabetical order. 
+                    # E, N, Z
+                    st.sort(['channel'])   
+            
+                    EW = st.select(channel="*E")[0].data
+                    NS = st.select(channel="*N")[0].data
+                    Z  = st.select(channel="*Z")[0].data
+                    
+                    # EW, NS, Z all same length and freq
+                    fs = st[0].stats.sampling_rate
+                    start_time = st[0].stats.starttime
+            
+                    # Define Window Length Dependent on AWS
+                    # 30 Min (times 60 sec) AWS Measurement window
+                    # times seismic sampling rate
+                    window_length = int(30 * 60 * fs)
+            
+                    # Determine number 30-minute windows
+                    n_windows = min(len(EW), len(NS), len(Z)) // window_length
+
+                    # Trim data to windows 
+                    n_samples = n_windows * window_length
+
+                    EW = EW[:n_samples]
+                    NS = NS[:n_samples]
+                    Z = Z[:n_samples]
+
+                    # Reshape into 30-minute windows
+                    EW_out = EW.reshape(n_windows, window_length)
+                    NS_out = NS.reshape(n_windows, window_length)
+                    Z_out = Z.reshape(n_windows, window_length)
+
+                    # Window start times
+                    window_times = [start_time + i * 30 * 60 for i in range(n_windows)]
+            
+                    # Stop if seismic data doesn't line up
+                    if (np.isnan(EW_out).any() or np.isnan(NS_out).any() or np.isnan(Z_out).any()):
+                        print('Error: Seismic data contains NaNs.')
+                        return None
+            
+                    # Apply Hann Window 
+                    taper_length = int(0.02 * window_length) # 2% taper
+                    window = np.ones(window_length) # Establish uniform window
+                    hann = np.hanning(2 * taper_length) # Create hann window for both (2) sides of data
+                    window[:taper_length] = hann[:taper_length] # Apply 2% to first half
+                    window[-taper_length:] = hann[taper_length:] # Apply 2% to second half
+                    # Apply
+                    EW_win = EW_out * window[None, :]
+                    NS_win = NS_out * window[None, :]
+                    Z_win = Z_out * window[None, :]
+            
+                    # Compute rfft for each component
+                    y_EW = rfft(EW_win, axis = 1)
+                    y_NS = rfft(NS_win, axis = 1)
+                    y_Z = rfft(Z_win, axis = 1)
+                
+                    # Compute rfft frequency
+                    freq = rfftfreq(window_length, 1/fs)
+            
+                    # Calculate power for each component
+                    EW_p = np.abs(y_EW)**2
+                    NS_p = np.abs(y_NS)**2
+                    Z_p = np.abs(y_Z)**2
+
+            
+                    # Save spectra as a dictionary
+                    spectra.append({'freq': freq,
+                                    'times': window_times,
+                                    'EW': EW_p,
+                                    'NS': NS_p,
+                                    'Z': Z_p})
+            
+                    all_spectra.append({station: spectra})
+                    self.fft = all_spectra 
+
+                return self.fft
 
             # Regression Model
             class Models:

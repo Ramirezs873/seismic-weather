@@ -4823,17 +4823,28 @@ class Seismic:
                 
                     return results
                 
-                def predict_model(self, 
-                               plotting = True,
-                               model_path= None,
-                               model_choice = 'EN',
-                               date = 'Time Period'):
+                def no_aws_predict_model(self, 
+                                        model_path= None,
+                                        spectra = None,
+                                        model_choice = 'EN',
+                                        date = 'Time Period',
+                                        fig_size = (15,10)):
+
                     
+                    # option to input spectra from a dict
+                    if spectra is not None:
+                        self.seismic_wind.fft = [spectra]
+
                     results = {}
 
                     for station_dict in self.seismic_wind.fft:
                         station = list(station_dict.keys())[0]
-                        station_data = station_dict[station][0]
+                        
+                        if spectra is not None:
+                            station_data = station_dict[station]
+                        else:
+                            station_data = station_dict[station][0]
+
                         # to .joblib file
                         if model_path is not None:
                             saved = joblib.load(model_path)
@@ -4884,153 +4895,244 @@ class Seismic:
                         pred_WS = np.round(pred_WS, decimals=1)
                         pred_WD = np.round(pred_WD, decimals=-1) % 360
 
-                        station_results = {'Predicted_WS': pred_WS, 'Predicted_WD': pred_WD}
+                        t = station_data['times']
 
-                        # Evaluate
-                        
-                        station_results['Observed_WS'] = np.asarray(station_data['aws_values'])
-                        
-                        WS_error = pred_WS - station_results['Observed_WS']
-                        station_results['WS_R2'] = r2_score(station_results['Observed_WS'], pred_WS) 
-                        station_results['WS_RMSE'] = np.sqrt(np.mean(WS_error**2))
-                        station_results['WS_MAE'] = np.mean(np.abs(WS_error))
-                        station_results['WS_Std'] = np.std(WS_error, ddof=1)
-                        station_results['Observed_WD'] = np.asarray(station_data['wind_direction'])
-                        
-                        WD_error = (pred_WD - station_results['Observed_WD'] + 180) % 360 - 180
-                        station_results['WD_MAE'] = np.mean(np.abs(WD_error))
-                        station_results['WD_RMSE'] = np.sqrt(np.mean(WD_error**2))
-                        station_results['WD_Std'] = np.std(WD_error, ddof=1)
+                        station_results = {'Predicted_WS': pred_WS, 
+                                            'Predicted_WD': pred_WD,
+                                            'times': t}
 
-
-                        obs_WS = station_results['Observed_WS']
-                        obs_WD = station_results['Observed_WD']
-                        WS_bias = np.mean(WS_error)
-                        WS_correlation, WS_p_value = pearsonr(obs_WS, pred_WS - WS_bias)
-                        WS_error_corrected = pred_WS - WS_bias - station_results['Observed_WS']
-                        pred_WS_bias_corrected = pred_WS - WS_bias 
-                        WD_bias = np.rad2deg(np.arctan2(np.mean(np.sin(np.deg2rad(WD_error))), np.mean(np.cos(np.deg2rad(WD_error)))))
-                        pred_WD_bias_corrected = (pred_WD - WD_bias) % 360
-                        WD_error_corrected = (pred_WD_bias_corrected - station_results['Observed_WD'] + 180) % 360 - 180
-                        WD_Std_corrected = np.std(WD_error_corrected, ddof=1)
-
-                        station_results['WD_Bias'] = WD_bias
-                        station_results['WD_Std_corrected'] = WD_Std_corrected  
-                        station_results['WD_MAE_corrected'] = np.mean(np.abs(WD_error_corrected))
-
-                        
                         results[station] = station_results
-
-                        if plotting == True: 
-                            
-                            t = station_data['time']
-                    
-                            # WS vs Time
-                            plt.figure(figsize=(10, 10))
-                            plt.plot(t,  obs_WS, label='Observed WS', linewidth=1.5, color = 'royalblue')
-                            plt.plot(t, pred_WS_bias_corrected, label='Bias Corrected Predicted WS', linewidth=1.5, color = 'orange')
-                            plt.fill_between(t, pred_WS_bias_corrected - station_results['WS_Std'], 
-                                             pred_WS_bias_corrected + station_results['WS_Std'],alpha=0.2, color = 'peru',
-                                             label=r'Bias Corrected Predicted WS $\pm 1\sigma$')
-                            plt.ylabel('Wind Speed (km/hr)')
-                            plt.title(f'Wind Speed Prediction and Observed: {date}')
-                            plt.xlabel('Time')
-                            plt.legend()
-                            
-                            print(f'R^2 Obs and bias-corrected Prediction: {WS_correlation**2}')
-                            print(f'p value Obs and bias-corrected Prediction: {WS_p_value}')
-
-                            # WS Obs vs Pred
-                            plt.figure(figsize=(10, 10))
-                            plt.scatter(obs_WS, pred_WS_bias_corrected ,alpha=0.7, s=100, label='Observed vs Predicted')
-                            # y = x line
-                            limits = [min(obs_WS.min(), pred_WS_bias_corrected.min()),
-                                    max(obs_WS.max(), pred_WS_bias_corrected.max())]
-                            plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
-                            plt.xlabel('Observed Wind Speed (km/hr)', fontsize=20)
-                            plt.ylabel('Bias-Corrected Predicted Wind Speed (km/hr)', fontsize=20)
-                            plt.title(f'Obs vs Pred Wind Speed: {date} ', fontsize=25)
-                            plt.xticks(fontsize=20)
-                            plt.yticks(fontsize=20)
-                            plt.legend(fontsize=16, loc='upper left')
-                            plt.grid(alpha=0.3)
-                            plt.tight_layout()
-
-                            # WS Error vs Time
-                            plt.figure(figsize=(12, 5))
-                            plt.plot(t, WS_error_corrected)
-                            plt.axhline(0, color='red', linestyle='--')
-                            plt.xlabel('Time')
-                            plt.ylabel('Wind Speed Error (km/hr)')
-                            plt.title(f'Wind Speed Prediction Error: {date}')
-                            plt.grid(alpha=0.3)
-                            plt.tight_layout()
-                            plt.show()
-
-                            # WD Error vs Time
-                            plt.figure(figsize=(12, 5))
-                            plt.plot(t, WD_error_corrected)
-                            plt.axhline(0, color='red', linestyle='--')
-                            plt.axhline(180, color='grey', linestyle=':')
-                            plt.axhline(-180, color='grey', linestyle=':')
-                            plt.xlabel('Time')
-                            plt.ylabel('Bias-corrected WD Error (°)')
-                            plt.title(f'Bias-corrected Wind Direction Error: {date} ')
-                            plt.grid(alpha=0.3)
-                            plt.tight_layout()
-                            plt.show()
-
-                            # WD Obs vs Pred
-                            plt.figure(figsize=(10, 10))
-                            plt.scatter(obs_WD, pred_WD_bias_corrected,alpha=0.7, s=100, label='Observed vs Predicted')
-                            # y = x line
-                            limits = [min(obs_WD.min(), pred_WD_bias_corrected.min()),
-                                    max(obs_WD.max(), pred_WD_bias_corrected.max())]
-                            plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
-                            plt.xlabel('Observed Wind Direction (°)', fontsize=20)
-                            plt.ylabel('Predicted Wind Direction (°)', fontsize=20)
-                            plt.title(f'Obs vs Pred Wind Direction {date}', fontsize=25)
-                            plt.xticks(fontsize=20)
-                            plt.yticks(fontsize=20)
-                            plt.legend(fontsize=16, loc='upper left')
-                            plt.grid(alpha=0.3)
-                            plt.tight_layout()
-
-                            # Polar plot
-                            cardinals = {"N": 0,           
-                                        "E": (np.pi / 2),
-                                        "S": (np.pi),
-                                        "W": (3 * np.pi / 2)}
-                            plt.figure(figsize=(10,6))
-                            ax = plt.subplot(projection='polar')
-                            plt.polar()              
-                            obs = ax.scatter(np.deg2rad(obs_WD), obs_WS, alpha=0.7,s = 60, label = f'Observed Wind', marker='x')
-                            pred = ax.scatter(np.deg2rad(pred_WD_bias_corrected), pred_WS_bias_corrected, alpha=0.7, s = 60, label = f'Predicted Wind', marker='^')
-                            for i in range(len(pred_WD_bias_corrected)):
-                                ax.plot([np.deg2rad(obs_WD[i]), np.deg2rad(pred_WD_bias_corrected[i])], [obs_WS[i], pred_WS_bias_corrected[i]], color='grey', alpha=1, linewidth=0.8)
-                            # Make it pretty
-                            ax.set_theta_zero_location('N')
-                            ax.set_theta_direction(-1)
-                            ax.set_ylabel(f'Wind Speed', labelpad=55, fontsize = 12)
-                            ax.set_title(f"Wind Speed and Direction: {date}", pad = 60, fontsize = 25)
-                            ax.set_rlabel_position(0)
-                            ax.tick_params(labelsize = 12)
-                            rmax = ax.get_rmax()
-                            # Add cardinal direction labels
-                            for label, angle in cardinals.items():
-                                            ax.text(
-                                                angle,
-                                                rmax * 1.3,
-                                                label,
-                                                ha="center",
-                                                va="center",
-                                                fontsize=15,
-                                                fontweight="bold",
-                                                clip_on=False)                            
-                            plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
-                            plt.tight_layout()
-
+                
+                        # WS vs Time
+                        plt.figure(figsize=fig_size)
+                        plt.plot(t, pred_WS, label='Predicted WS', linewidth=1.5, color = 'orange')
+                        plt.ylabel('Wind Speed (km/hr)')
+                        plt.title(f'Wind Speed Prediction: {date}')
+                        plt.xlabel('Time')
+                        plt.legend()
+   
                     return results
+
+
+                def predict_model(self, 
+                                               plotting = True,
+                                               model_path= None,
+                                               spectra = None,
+                                               model_choice = 'EN',
+                                               date = 'Time Period'):
+                
+                                    
+                                    # option to input spectra from a dict
+                                    if spectra is not None:
+                                        self.seismic_wind.fft = [spectra]
+                
+                                    results = {}
+                
+                                    for station_dict in self.seismic_wind.fft:
+                                        station = list(station_dict.keys())[0]
+                                        
+                                        if spectra is not None:
+                                            station_data = station_dict[station]
+                                        else:
+                                            station_data = station_dict[station][0]
+                
+                                        # to .joblib file
+                                        if model_path is not None:
+                                            saved = joblib.load(model_path)
+                                        else:
+                                            if model_choice == 'EN':
+                                                saved = self.EN_models[station]
+                                            elif model_choice == 'SVR':
+                                                saved = self.SVR_models[station]
+                                            else:
+                                                print('Invalid Model Choice')
+                                                return
+                
+                                        var_model = saved['var_model']
+                                        sin_model = saved['sin_model']
+                                        cos_model = saved['cos_model']
+                                        bands = saved['bands']
+                
+                                        EW_power = station_data['EW']
+                                        NS_power = station_data['NS']
+                                        Z_power = station_data['Z']
+                                        freq = station_data['freq']
+                
+                                        n_samples = Z_power.shape[0]
+                                        X_Z = np.zeros((n_samples, len(bands)))
+                                        X_NS = np.zeros((n_samples, len(bands)))
+                                        X_EW = np.zeros((n_samples, len(bands)))
+                
+                                        # Apply bandwidths to data
+                                        for i, (f1,f2) in enumerate(bands):
+                                            band_width = (freq >= f1) & (freq < f2)
+                                
+                                            # Convert to log to better inspect power scales and apply bandwidth
+                                            # [:, band_width], select frequencies and slice unwanted freq data from the row
+                                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+                                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+                                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+                                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+                                
+                                        # Stack all together to process all together as a larger dataset
+                                        X_all = np.column_stack([X_Z, X_NS, X_EW])
+                
+                                        # Predict!
+                                        pred_WS = var_model.predict(X_all)
+                                        pred_sin = sin_model.predict(X_all)
+                                        pred_cos = cos_model.predict(X_all)
+                                        pred_WD = np.rad2deg(np.arctan2(pred_sin, pred_cos)) % 360
+                
+                                        pred_WS = np.round(pred_WS, decimals=1)
+                                        pred_WD = np.round(pred_WD, decimals=-1) % 360
+                
+                                        station_results = {'Predicted_WS': pred_WS, 'Predicted_WD': pred_WD}
+                
+                                        # Evaluate
+                                        
+                                        station_results['Observed_WS'] = np.asarray(station_data['aws_values'])
+                                        
+                                        WS_error = pred_WS - station_results['Observed_WS']
+                                        station_results['WS_R2'] = r2_score(station_results['Observed_WS'], pred_WS) 
+                                        station_results['WS_RMSE'] = np.sqrt(np.mean(WS_error**2))
+                                        station_results['WS_MAE'] = np.mean(np.abs(WS_error))
+                                        station_results['WS_Std'] = np.std(WS_error, ddof=1)
+                                        station_results['Observed_WD'] = np.asarray(station_data['wind_direction'])
+                                        
+                                        WD_error = (pred_WD - station_results['Observed_WD'] + 180) % 360 - 180
+                                        station_results['WD_MAE'] = np.mean(np.abs(WD_error))
+                                        station_results['WD_RMSE'] = np.sqrt(np.mean(WD_error**2))
+                                        station_results['WD_Std'] = np.std(WD_error, ddof=1)
+                
+                
+                                        obs_WS = station_results['Observed_WS']
+                                        obs_WD = station_results['Observed_WD']
+                                        WS_bias = np.mean(WS_error)
+                                        WS_correlation, WS_p_value = pearsonr(obs_WS, pred_WS - WS_bias)
+                                        WS_error_corrected = pred_WS - WS_bias - station_results['Observed_WS']
+                                        pred_WS_bias_corrected = pred_WS - WS_bias 
+                                        WD_bias = np.rad2deg(np.arctan2(np.mean(np.sin(np.deg2rad(WD_error))), np.mean(np.cos(np.deg2rad(WD_error)))))
+                                        pred_WD_bias_corrected = (pred_WD - WD_bias) % 360
+                                        WD_error_corrected = (pred_WD_bias_corrected - station_results['Observed_WD'] + 180) % 360 - 180
+                                        WD_Std_corrected = np.std(WD_error_corrected, ddof=1)
+                
+                                        station_results['WD_Bias'] = WD_bias
+                                        station_results['WD_Std_corrected'] = WD_Std_corrected  
+                                        station_results['WD_MAE_corrected'] = np.mean(np.abs(WD_error_corrected))
+                
+                                        
+                                        results[station] = station_results
+                
+                                        if plotting == True: 
+                                            
+                                            t = station_data['time']
+                                    
+                                            # WS vs Time
+                                            plt.figure(figsize=(10, 10))
+                                            plt.plot(t,  obs_WS, label='Observed WS', linewidth=1.5, color = 'royalblue')
+                                            plt.plot(t, pred_WS_bias_corrected, label='Bias Corrected Predicted WS', linewidth=1.5, color = 'orange')
+                                            plt.fill_between(t, pred_WS_bias_corrected - station_results['WS_Std'], 
+                                                             pred_WS_bias_corrected + station_results['WS_Std'],alpha=0.2, color = 'peru',
+                                                             label=r'Bias Corrected Predicted WS $\pm 1\sigma$')
+                                            plt.ylabel('Wind Speed (km/hr)')
+                                            plt.title(f'Wind Speed Prediction and Observed: {date}')
+                                            plt.xlabel('Time')
+                                            plt.legend()
+                                            
+                                            print(f'R^2 Obs and bias-corrected Prediction: {WS_correlation**2}')
+                                            print(f'p value Obs and bias-corrected Prediction: {WS_p_value}')
+                
+                                            # WS Obs vs Pred
+                                            plt.figure(figsize=(10, 10))
+                                            plt.scatter(obs_WS, pred_WS_bias_corrected ,alpha=0.7, s=100, label='Observed vs Predicted')
+                                            # y = x line
+                                            limits = [min(obs_WS.min(), pred_WS_bias_corrected.min()),
+                                                    max(obs_WS.max(), pred_WS_bias_corrected.max())]
+                                            plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
+                                            plt.xlabel('Observed Wind Speed (km/hr)', fontsize=20)
+                                            plt.ylabel('Bias-Corrected Predicted Wind Speed (km/hr)', fontsize=20)
+                                            plt.title(f'Obs vs Pred Wind Speed: {date} ', fontsize=25)
+                                            plt.xticks(fontsize=20)
+                                            plt.yticks(fontsize=20)
+                                            plt.legend(fontsize=16, loc='upper left')
+                                            plt.grid(alpha=0.3)
+                                            plt.tight_layout()
+                
+                                            # WS Error vs Time
+                                            plt.figure(figsize=(12, 5))
+                                            plt.plot(t, WS_error_corrected)
+                                            plt.axhline(0, color='red', linestyle='--')
+                                            plt.xlabel('Time')
+                                            plt.ylabel('Wind Speed Error (km/hr)')
+                                            plt.title(f'Wind Speed Prediction Error: {date}')
+                                            plt.grid(alpha=0.3)
+                                            plt.tight_layout()
+                                            plt.show()
+                
+                                            # WD Error vs Time
+                                            plt.figure(figsize=(12, 5))
+                                            plt.plot(t, WD_error_corrected)
+                                            plt.axhline(0, color='red', linestyle='--')
+                                            plt.axhline(180, color='grey', linestyle=':')
+                                            plt.axhline(-180, color='grey', linestyle=':')
+                                            plt.xlabel('Time')
+                                            plt.ylabel('Bias-corrected WD Error (°)')
+                                            plt.title(f'Bias-corrected Wind Direction Error: {date} ')
+                                            plt.grid(alpha=0.3)
+                                            plt.tight_layout()
+                                            plt.show()
+                
+                                            # WD Obs vs Pred
+                                            plt.figure(figsize=(10, 10))
+                                            plt.scatter(obs_WD, pred_WD_bias_corrected,alpha=0.7, s=100, label='Observed vs Predicted')
+                                            # y = x line
+                                            limits = [min(obs_WD.min(), pred_WD_bias_corrected.min()),
+                                                    max(obs_WD.max(), pred_WD_bias_corrected.max())]
+                                            plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
+                                            plt.xlabel('Observed Wind Direction (°)', fontsize=20)
+                                            plt.ylabel('Predicted Wind Direction (°)', fontsize=20)
+                                            plt.title(f'Obs vs Pred Wind Direction {date}', fontsize=25)
+                                            plt.xticks(fontsize=20)
+                                            plt.yticks(fontsize=20)
+                                            plt.legend(fontsize=16, loc='upper left')
+                                            plt.grid(alpha=0.3)
+                                            plt.tight_layout()
+                
+                                            # Polar plot
+                                            cardinals = {"N": 0,           
+                                                        "E": (np.pi / 2),
+                                                        "S": (np.pi),
+                                                        "W": (3 * np.pi / 2)}
+                                            plt.figure(figsize=(10,6))
+                                            ax = plt.subplot(projection='polar')
+                                            plt.polar()              
+                                            obs = ax.scatter(np.deg2rad(obs_WD), obs_WS, alpha=0.7,s = 60, label = f'Observed Wind', marker='x')
+                                            pred = ax.scatter(np.deg2rad(pred_WD_bias_corrected), pred_WS_bias_corrected, alpha=0.7, s = 60, label = f'Predicted Wind', marker='^')
+                                            for i in range(len(pred_WD_bias_corrected)):
+                                                ax.plot([np.deg2rad(obs_WD[i]), np.deg2rad(pred_WD_bias_corrected[i])], [obs_WS[i], pred_WS_bias_corrected[i]], color='grey', alpha=1, linewidth=0.8)
+                                            # Make it pretty
+                                            ax.set_theta_zero_location('N')
+                                            ax.set_theta_direction(-1)
+                                            ax.set_ylabel(f'Wind Speed', labelpad=55, fontsize = 12)
+                                            ax.set_title(f"Wind Speed and Direction: {date}", pad = 60, fontsize = 25)
+                                            ax.set_rlabel_position(0)
+                                            ax.tick_params(labelsize = 12)
+                                            rmax = ax.get_rmax()
+                                            # Add cardinal direction labels
+                                            for label, angle in cardinals.items():
+                                                            ax.text(
+                                                                angle,
+                                                                rmax * 1.3,
+                                                                label,
+                                                                ha="center",
+                                                                va="center",
+                                                                fontsize=15,
+                                                                fontweight="bold",
+                                                                clip_on=False)                            
+                                            plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
+                                            plt.tight_layout()
+                
+                                    return results
 
                 def Ridge(self,
                           fmin = 1,

@@ -2548,7 +2548,8 @@ class Seismic:
                                 n_splits = 5,
                                 min_WS = None,
                                 WS_only = True,
-                                spectra = None):
+                                spectra = None,
+                                sample_size = None):
                     """
                     Optimises the support vector regression model parameters for best CV R2 from seismic spectra and aws inputs.
 
@@ -2569,6 +2570,8 @@ class Seismic:
                             True/False. False to consider speed and direction.
                         spectra (dict):
                             A dictionary containing fft output.
+                        sample_size (int):
+                            Number of windows used in the optimisation process. 
                     """
                     
                     # option to input spectra from a dict
@@ -2644,6 +2647,21 @@ class Seismic:
                             mask = y_all[:, 0] > min_WS
                             X_all = X_all[mask]
                             y_all = y_all[mask]
+
+                        # Randomly sample dataset based on sample size input
+                        # If input sample size is larger than available data, use all available data
+                        # If input is None, then use all available data
+                        if sample_size is not None and len(X_all) > sample_size:
+
+                            # random state 42
+                            rng = np.random.default_rng(42)
+
+                            # Select the random set
+                            sample_idx = rng.choice(len(X_all), size=sample_size, replace=False)
+
+                            # Filter the data to the random set
+                            X_all = X_all[sample_idx]
+                            y_all = y_all[sample_idx]
                             
                         # Train Model
                         X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)

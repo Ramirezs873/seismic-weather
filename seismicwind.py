@@ -3576,6 +3576,7 @@ class Seismic:
                         plot_power_aws = True,
                         variable_name = 'AWS Wind Speed (km/hr)',
                         spectra = None,
+                        sample_size = None,
                         C = None,
                         gamma = None,
                         epsilon = None,
@@ -3621,7 +3622,9 @@ class Seismic:
                                 The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
                             spectra (dict):
                                 A dictionary containing fft output.
-                    
+                            sample_size (int):
+                                The number of samples to use for training the model.
+
                         Outputs:
                             results (list):
                                 A list of dictionaries containing information about all the correlation results for each station.
@@ -3718,6 +3721,21 @@ class Seismic:
                             mask = y_all[:, 0] > min_WS
                             X_all = X_all[mask]
                             y_all = y_all[mask]
+
+                        # Randomly sample dataset based on sample size input
+                        # If input sample size is larger than available data, use all available data
+                        # If input is None, then use all available data
+                        if sample_size is not None and len(X_all) > sample_size:
+
+                            # random state 42
+                            rng = np.random.default_rng(42)
+
+                            # Select the random set
+                            sample_idx = rng.choice(len(X_all), size=sample_size, replace=False)
+
+                            # Filter the data to the random set
+                            X_all = X_all[sample_idx]
+                            y_all = y_all[sample_idx]
                             
                         # Train Model
                         X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)

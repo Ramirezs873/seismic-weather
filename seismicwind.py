@@ -4951,12 +4951,12 @@ class Seismic:
 
 
                 def predict_model(self, 
-                                               plotting = True,
-                                               model_path= None,
-                                               spectra = None,
-                                               model_choice = 'EN',
-                                               date = 'Time Period'):
-                
+                                plot_all = True,
+                                model_path= None,
+                                spectra = None,
+                                model_choice = 'EN',
+                                date = 'Time Period'):
+
                                     
                                     # option to input spectra from a dict
                                     if spectra is not None:
@@ -5059,25 +5059,26 @@ class Seismic:
                                         
                                         results[station] = station_results
                 
-                                        if plotting == True: 
+                                        
                                             
-                                            t = station_data['time']
-                                    
-                                            # WS vs Time
-                                            plt.figure(figsize=(10, 10))
-                                            plt.plot(t,  obs_WS, label='Observed WS', linewidth=1.5, color = 'royalblue')
-                                            plt.plot(t, pred_WS_bias_corrected, label='Bias Corrected Predicted WS', linewidth=1.5, color = 'orange')
-                                            plt.fill_between(t, pred_WS_bias_corrected - station_results['WS_Std'], 
-                                                             pred_WS_bias_corrected + station_results['WS_Std'],alpha=0.2, color = 'peru',
-                                                             label=r'Bias Corrected Predicted WS $\pm 1\sigma$')
-                                            plt.ylabel('Wind Speed (km/hr)')
-                                            plt.title(f'Wind Speed Prediction and Observed: {date}')
-                                            plt.xlabel('Time')
-                                            plt.legend()
-                                            
-                                            print(f'R^2 Obs and bias-corrected Prediction: {WS_correlation**2}')
-                                            print(f'p value Obs and bias-corrected Prediction: {WS_p_value}')
-                
+                                        t = station_data['time']
+                                
+                                        # WS vs Time
+                                        plt.figure(figsize=(10, 10))
+                                        plt.plot(t,  obs_WS / 3.6, label='Observed WS', linewidth=1.5, color = 'royalblue')
+                                        plt.plot(t, pred_WS_bias_corrected / 3.6, label='Bias Corrected Predicted WS', linewidth=1.5, color = 'orange')
+                                        plt.fill_between(t, pred_WS_bias_corrected / 3.6 - station_results['WS_Std'] / 3.6, 
+                                                            pred_WS_bias_corrected / 3.6 + station_results['WS_Std'] / 3.6,alpha=0.2, color = 'peru',
+                                                            label=r'Bias Corrected Predicted WS $\pm 1\sigma$')
+                                        plt.ylabel('Wind Speed (m/s)')
+                                        plt.title(f'{date}')
+                                        plt.xlabel('Time')
+                                        plt.legend()
+                                        
+                                        print(f'R^2 Obs and bias-corrected Prediction: {WS_correlation**2}')
+                                        print(f'p value Obs and bias-corrected Prediction: {WS_p_value}')
+
+                                        if plot_all == True: 
                                             # WS Obs vs Pred
                                             plt.figure(figsize=(10, 10))
                                             plt.scatter(obs_WS, pred_WS_bias_corrected ,alpha=0.7, s=100, label='Observed vs Predicted')

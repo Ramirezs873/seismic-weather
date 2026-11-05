@@ -4955,7 +4955,8 @@ class Seismic:
                                 model_path= None,
                                 spectra = None,
                                 model_choice = 'EN',
-                                date = 'Time Period'):
+                                date = 'Time Period',
+                                legend = True):
 
                                     
                                     # option to input spectra from a dict
@@ -5070,10 +5071,13 @@ class Seismic:
                                         plt.fill_between(t, pred_WS_bias_corrected / 3.6 - station_results['WS_Std'] / 3.6, 
                                                             pred_WS_bias_corrected / 3.6 + station_results['WS_Std'] / 3.6,alpha=0.2, color = 'peru',
                                                             label=r'Bias Corrected Predicted WS $\pm 1\sigma$')
-                                        plt.ylabel('Wind Speed (m/s)')
-                                        plt.title(f'{date}')
-                                        plt.xlabel('Time')
-                                        plt.legend()
+                                        plt.ylabel('Wind Speed (m/s)', fontsize=14)
+                                        plt.title(f'{date}', fontsize=16)
+                                        plt.xlabel('Time', fontsize =14 )
+                                        plt.xticks(fontsize =14, rotation=45)
+                                        plt.yticks(fontsize =14 )
+                                        if legend == True:
+                                            plt.legend(fontsize=11)
                                         
                                         print(f'R^2 Obs and bias-corrected Prediction: {WS_correlation**2}')
                                         print(f'p value Obs and bias-corrected Prediction: {WS_p_value}')

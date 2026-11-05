@@ -1920,7 +1920,10 @@ class Seismic:
 
             # FFT Analysis
             def spectra_fft(self,
-                            pad_value=np.nan):
+                            pad_value=np.nan,
+                            EW_channel = None,
+                            NS_channel = None,
+                            Z_channel = None):
                 
                 """
                 Trim 30 minute segments of seismic data which match AWS dataset.
@@ -1961,10 +1964,16 @@ class Seismic:
                     # Puts in alphabetical order. 
                     # E, N, Z
                     st.sort(['channel'])   
-            
-                    EW = st.select(channel="*E")[0].data
-                    NS = st.select(channel="*N")[0].data
-                    Z  = st.select(channel="*Z")[0].data
+
+                    if EW_channel and NS_channel and Z_channel is None:
+                        EW_channel = '*E'
+                        NS_channel = '*N'
+                        Z_channel = '*Z'
+                    
+
+                    EW = st.select(channel=EW_channel)[0].data
+                    NS = st.select(channel=NS_channel)[0].data
+                    Z  = st.select(channel=Z_channel)[0].data
                     
                     # EW, NS, Z all same length and freq
                     fs = st[0].stats.sampling_rate
@@ -2672,7 +2681,7 @@ class Seismic:
                         c_list = np.logspace(-4, 7, 10)
                         gamma_list = np.logspace(-4, 4, 10)
                         epsilon_list = np.linspace(0.05, 3, 15)
-                
+
                         best_var_r2 = -np.inf
                         best_var_params = None
 
@@ -2681,6 +2690,7 @@ class Seismic:
                                 for e in epsilon_list:
                                     # Pipeline
                                     # Scale, SVR
+                                    
                                     var_svr = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=c, gamma = g, epsilon=e))])
                                     var_score = cross_val_score(var_svr, X_all_train, y_all_train[:, 0], cv=cv, scoring ='r2', n_jobs=-1)
                                     var_mean_r2 = var_score.mean()

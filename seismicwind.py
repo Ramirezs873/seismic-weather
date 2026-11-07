@@ -60,7 +60,6 @@ class Seismic:
         # AWS data
         self.aws = None
 
-
     # Gather Data
     def get_seis(self, 
                  client,
@@ -112,25 +111,27 @@ class Seismic:
 
         """
 
-        # Check if file already exists
-        
-
         # Config Support
         base_path = Path(self.config["seismic_data_path"]) if self.config else Path(".")
         base_path.mkdir(parents=True, exist_ok=True)
 
         if file_name is None:
+            # Create filename
             time = t_start.strftime("%Y-%m-%d") # Start date of data
             filename = f"{network}_{station}_{time}"
         else:
+            # Use input filename
             filename = file_name
 
+        # Create file path and specify as mseed file
         file_path = (base_path / filename).with_suffix(".mseed")
 
+        # Check if file already exists
         if file_path.exists():
             print(f"Reading existing file: {file_path}")
             station_data = read(str(file_path))
 
+        # Download data if no file exists
         else:
             print("File not found. Downloading data")
     
@@ -154,7 +155,8 @@ class Seismic:
         
         # Write to a dictionary
         wave_dict = defaultdict(list) 
-    
+        
+        # Write seismic traces
         for tr in station_data:
             station = (
             f"{tr.stats.network}."
@@ -163,6 +165,7 @@ class Seismic:
             )
             wave_dict[station].append(tr) 
 
+        # Save to self
         self.st = wave_dict
 
         return self
@@ -177,7 +180,8 @@ class Seismic:
                     t_end,
                     username = None,
                     password = None,
-                    file_name = None):
+                    file_name = None,
+                    save = True):
             """
             Gather reference seismic waveform data from a FDSN client,
             or from a local file if the file name already exists
@@ -207,32 +211,35 @@ class Seismic:
                     Password to access data (if required).
                 file_name (str):
                     Filename to save the data as.
+                save (bool):
+                    True/False. True to save as mseed file.
                 
             Returns:
                 wave_dict (dict):
                     Dictionary containing seismic waveform data.
-    
             """
-    
-            # Check if file already exists
-            
     
             # Config Support
             base_path = Path(self.config["seismic_data_path"]) if self.config else Path(".")
             base_path.mkdir(parents=True, exist_ok=True)
     
             if file_name is None:
+                # Create filename
                 time = t_start.strftime("%Y-%m-%d") # Start date of data
                 filename = f"{network}_{station}_{time}"
             else:
+                # Use input filename
                 filename = file_name
     
+            # Create file path and specify as mseed file
             file_path = (base_path / filename).with_suffix(".mseed")
     
+            # Check if file already exists
             if file_path.exists():
                 print(f"Reading existing file: {file_path}")
                 station_data = read(str(file_path))
     
+            # Download data if no file exists
             else:
                 print("File not found. Downloading data")
         
@@ -249,13 +256,15 @@ class Seismic:
                                                 starttime=t_start, 
                                                 endtime=t_end) 
     
-                # Write to file
-                station_data.write(str(file_path), format = 'MSEED')
-                print(f"Saved to: {file_path}")
+                if save == True:
+                    # Write to file
+                    station_data.write(str(file_path), format = 'MSEED')
+                    print(f"Saved to: {file_path}")
             
             # Write to a dictionary
             wave_dict = defaultdict(list) 
-        
+            
+            # Write seismic traces
             for tr in station_data:
                 station = (
                 f"{tr.stats.network}."
@@ -264,12 +273,12 @@ class Seismic:
                 )
                 wave_dict[station].append(tr) 
     
+            # Save to self
             self.ref = wave_dict
     
             return self
 
     # Helper Functions
-
     @staticmethod 
     def find_channel(stream, options):
         """
@@ -479,7 +488,6 @@ class Seismic:
 
             return self.seismic
         
-
         # Detrend
         def detrend(self,
                    save_mseed = False,
@@ -788,7 +796,6 @@ class Seismic:
         
             return self.seismic
             
-
         # Amplitude
         def amp_correction(self,
                            NS_channel=None,
@@ -990,7 +997,6 @@ class Seismic:
         
             return self.seismic
     
-
         # Rotate
         def rotate(self,
                    NS_channel = None, 
@@ -1237,11 +1243,9 @@ class Seismic:
                     fig.suptitle(f"Horizontal Particle Motion for {stat}\n" f"{time} for {timespan:.1f} seconds",y=1.05, fontsize=16)
 
                     plt.tight_layout()
-                    
-                                    
+                                     
             return self.seismic
             
-
 
     # Seismic Analysis
     class Analysis:
@@ -1282,16 +1286,13 @@ class Seismic:
                     print(f"Plotting ref station {station_name}")
                     st.plot(color=color)
             
-
         # Create PPSD Plots
         def ppsd(self):
             pass
 
-
         # Inspect Amplitudes
         def amp(self):
             pass
-
 
         # Cross Correlation
         def cc_correction(self,
@@ -1687,21 +1688,17 @@ class Seismic:
             return df
             pass
 
-
         # Event Data
         def events(self):
             pass
-
 
         # Station Inventory
         def inventory(self):
             pass
         
 
-
     # Seismic Wind Analysis
     class Wind:
-
 
         def __init__(self, seismic):
             self.seismic = seismic
@@ -1709,8 +1706,7 @@ class Seismic:
             self.wd = None
             self.seismic_wind = self.SeismicWind(seismic=self.seismic)
 
-
-        # Wind Data
+        # Meteorological Data
         def get_aws(self,
                     path,
                     station_code,
@@ -1731,8 +1727,6 @@ class Seismic:
                     The id code for the weather station data.
 
             Returns:
-                self.seismic:
-                    Seismic data
                 df (pd.DataFrame): 
                     A DataFrame containing the weather station data.
             """
@@ -1760,14 +1754,15 @@ class Seismic:
 
             return self.aws
 
-        
+        # Extract Specific Variable
         def get_var(self,
                     variable='Wind speed in km/h',
                     t_start=None,
                     t_end=None):
 
             """
-            Gathers variable data from the loaded aws dataset for a selected time period
+            Gathers variable data from the loaded aws dataset for a selected time period.
+            Optimised for wind data collection so wind direction is always gathered also.
 
             Parameters:
                 variable (str):
@@ -1776,6 +1771,10 @@ class Seismic:
                     Start time in UTC.
                 t_end (UTC):
                     End time in UTC.
+                
+            Returns:
+                wd (list):
+                    List containing time, variable, and wind direction data.
             """
 
             # Start with all AWS data
@@ -1819,23 +1818,21 @@ class Seismic:
             WD = WD[valid_mask]
             time = time[valid_mask]
 
+            # Save to self
             self.wd = [time, var, WD]
             self.seismic_wind.wd = self.wd
 
             return self.wd
 
-
-        # Plot aws speed
+        # Plot AWS Variable
         def plot_aws(self,
                      ylabel = 'AWS Varaible'):
             """
             Plots the aws for a given year and month from the provided DataFrame.
             
             Parameters:
-                apply_smooth (bool): 
-                    True/False. Applying ObsPy smooth() function.
-                smoothie (int):
-                    Number of values to calculate moving average for smoothing.
+                ylabel (str):
+                    Label for the y-axis of the plot.
             """
             # Create Figure 
             plt.figure(figsize=(15,6))
@@ -1851,9 +1848,7 @@ class Seismic:
             plt.ylim(0, ymax *1.1)
             plt.grid(alpha=0.3)
             plt.tight_layout()
-            plt.show()
-
-            
+  
         # Plot wind speed and direction
         def plot_rose_wind(self,
                            year=None, 
@@ -1990,11 +1985,10 @@ class Seismic:
                         angle=90,
                         side="counterclockwise")))
             fig.show()
-            
 
+            
         # Seismic Wind Analysis
         class SeismicWind:
-
 
             def __init__(self, seismic):
                 self.seismic = seismic
@@ -2016,13 +2010,15 @@ class Seismic:
                 for each seismic component and calculate the powerfor each time step. 
             
                 Parameters:
-                    seismic_mseed_file (str):
-                        Title of saved mseed file.
-                        Seismic data must begin atleast 30 minutes before the first AWS timestamp
-                        and end anytime after the final AWS timestamp.
                     pad_value (float):
                         Value to use for padding.
-            
+                    EW_channel (str):
+                        Channel code for East-West instrument component.
+                    NS_channel (str):
+                        Channel code for North-South instrument component.
+                    Z_channel (str):
+                        Channel code for Vertical instrument component.
+
                 Returns:
                     all_spectra (list):
                         A list of dictionaries containing the frequency and power 
@@ -2140,33 +2136,27 @@ class Seismic:
                     EW_p = np.abs(y_EW)**2
                     NS_p = np.abs(y_NS)**2
                     Z_p = np.abs(y_Z)**2
-
-                    # Phases
-                    EW_angle = np.angle(y_EW)
-                    NS_angle = np.angle(y_NS)
-                    Z_angle = np.angle(y_Z)
-                    relative_phase = np.angle(y_NS * np.conj(y_EW))
-
             
                     # Save spectra as a dictionary
                     spectra.append({'freq': freq,
                                     'EW': EW_p,
                                     'NS': NS_p,
                                     'Z': Z_p,
-                                    'EW_angle': EW_angle,
-                                    'NS_angle': NS_angle,
-                                    'Z_angle': Z_angle,
-                                    'relative_phase': relative_phase,
                                     'time' : aws_times,
                                     'aws_values' : self.wd[1],
                                     'wind_direction' : self.wd[2]},)
             
                     all_spectra.append({station: spectra})
+
+                    # Save to self
                     self.fft = all_spectra 
 
                 return self.fft
             
-            def no_aws_spectra_fft(self):
+            def no_aws_spectra_fft(self,
+                                    EW_channel = None,
+                                    NS_channel = None,
+                                    Z_channel = None):
                 
                 """
                 Trim 30 minute segments of seismic data.
@@ -2174,11 +2164,13 @@ class Seismic:
                 for each seismic component and calculate the powerfor each time step. 
             
                 Parameters:
-                    seismic_mseed_file (str):
-                        Title of saved mseed file.
-                    pad_value (float):
-                        Value to use for padding.
-            
+                    EW_channel (str):
+                        Channel code for East-West instrument component.
+                    NS_channel (str):
+                        Channel code for North-South instrument component.
+                    Z_channel (str):
+                        Channel code for Vertical instrument component.
+
                 Returns:
                     all_spectra (list):
                         A list of dictionaries containing the frequency and power 
@@ -2205,10 +2197,15 @@ class Seismic:
                     # Puts in alphabetical order. 
                     # E, N, Z
                     st.sort(['channel'])   
-            
-                    EW = st.select(channel="*E")[0].data
-                    NS = st.select(channel="*N")[0].data
-                    Z  = st.select(channel="*Z")[0].data
+                    
+                    if EW_channel and NS_channel and Z_channel is None:
+                        EW_channel = '*E'
+                        NS_channel = '*N'
+                        Z_channel = '*Z'
+                    
+                    EW = st.select(channel=EW_channel)[0].data
+                    NS = st.select(channel=NS_channel)[0].data
+                    Z  = st.select(channel=Z_channel)[0].data
                     
                     # EW, NS, Z all same length and freq
                     fs = st[0].stats.sampling_rate
@@ -2275,13 +2272,15 @@ class Seismic:
                                     'Z': Z_p})
             
                     all_spectra.append({station: spectra})
+
+                    # Save to self
                     self.fft = all_spectra 
 
                 return self.fft
 
+
             # Regression Model
             class Models:
-
 
                 def __init__(self, seismic_wind):
                     self.seismic_wind = seismic_wind
@@ -2338,6 +2337,13 @@ class Seismic:
                             Minimum wind speed (km/hr) to be considered in analysis.
                         WS_only (bool):
                             True/False. False to consider speed and direction.
+
+                    Returns:
+                        alpha_Ridge (float):
+                            The optimal alpha value for the wind speed ridge model.
+                        alpha_Ridge_WD (float):
+                            The optimal alpha value for the wind direction ridge model.
+
                     """
                     # Bands
                     # Create Bandwidths
@@ -2487,6 +2493,17 @@ class Seismic:
                             Minimum wind speed (km/hr) to be considered in analysis.
                         WS_only (bool):
                             True/False. False to consider speed and direction.
+                    
+                    Returns:
+                        alpha_EN (float):
+                            The optimal alpha value for the wind speed elastic net model.
+                        l1_ratio (float):
+                            The optimal l1 ratio value for the wind speed elastic net model.
+                        alpha_EN_WD (float):
+                            The optimal alpha value for the wind direction elastic net model.
+                        l1_ratio_EN_WD (float):
+                            The optimal l1 ratio value for the wind direction elastic net model.
+
                     """
 
                     warnings.filterwarnings('ignore', category=ConvergenceWarning)
@@ -2666,6 +2683,26 @@ class Seismic:
                             A dictionary containing fft output.
                         sample_size (int):
                             Number of windows used in the optimisation process. 
+
+                    Returns:
+                        C (float):
+                            The optimal C value for the wind speed SVR model.
+                        gamma (float):
+                            The optimal gamma value for the wind speed SVR model.
+                        epsilon (float):
+                            The optimal epsilon value for the wind speed SVR model.
+                        alpha_Ridge (float):
+                            The optimal alpha value for the wind speed ridge model.
+                        alpha_Ridge_WD (float):
+                            The optimal alpha value for the wind direction ridge model.
+                        alpha_EN (float):
+                            The optimal alpha value for the wind speed elastic net model.
+                        l1_ratio (float):
+                            The optimal l1 ratio value for the wind speed elastic net model.
+                        alpha_EN_WD (float):
+                            The optimal alpha value for the wind direction elastic net model.
+                        l1_ratio_EN_WD (float):
+                            The optimal l1 ratio value for the wind direction elastic net model.
                     """
                     
                     # option to input spectra from a dict
@@ -2860,7 +2897,6 @@ class Seismic:
                     Optimises the random forest model parameters for best CV R2 from seismic spectra and aws inputs.
                     This is less optimised than the other functions as it only tests a random selection
                     of parameters to find the best. This is due to large computational times. 
-                    Wind direction values are not computed.
 
                     Parameters:
                         fmin (int):
@@ -2875,7 +2911,30 @@ class Seismic:
                             Number of times to repeat the cross validation calculation
                         min_WS (int):
                             Minimum wind speed (km/hr) to be considered in analysis.
+
+                    Returns:
+                        n_estimators (int):
+                            The optimal number of trees in the random forest model.
+                        max_depth (int):
+                            The optimal maximum depth of the trees in the random forest model.
+                        min_samples_split (int):
+                            The optimal minimum number of samples required to split an internal node in the random forest model.
+                        min_samples_leaf (int):
+                            The optimal minimum number of samples required to be at a leaf node in the random forest model.
+                        max_features (float):
+                            The optimal number of features to consider when looking for the best split in the random forest model.
+                        n_estimators_WD (int):
+                            The optimal number of trees in the random forest model for wind direction.
+                        max_depth_WD (int):
+                            The optimal maximum depth of the trees in the random forest model for wind direction.
+                        min_samples_split_WD (int):
+                            The optimal minimum number of samples required to split an internal node in the random forest model for wind direction.
+                        min_samples_leaf_WD (int):
+                            The optimal minimum number of samples required to be at a leaf node in the random forest model for wind direction.
+                        max_features_WD (float):
+                            The optimal number of features to consider when looking for the best split in the random forest model for wind direction.
                     """
+
                     # Bands
                     # Create Bandwidths
                     bands = []
@@ -3068,8 +3127,28 @@ class Seismic:
                             Plot the relationship between seismic power and AWS values.
                         variable_name (str):
                             The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
-                
-                        Outputs:
+                        n_estimators (int):
+                            The number of trees in the random forest model.
+                        max_depth (int):
+                            The maximum depth of the trees in the random forest model.
+                        min_samples_split (int):
+                            The minimum number of samples required to split an internal node in the random forest model.
+                        min_samples_leaf (int):
+                            The minimum number of samples required to be at a leaf node in the random forest model.
+                        max_features (float):
+                            The number of features to consider when looking for the best split in the random forest model.
+                        n_estimators_WD (int):
+                            The number of trees in the random forest model for wind direction.
+                        max_depth_WD (int):
+                            The maximum depth of the trees in the random forest model for wind direction.
+                        min_samples_split_WD (int):
+                            The minimum number of samples required to split an internal node in the random forest model for wind direction.
+                        min_samples_leaf_WD (int):
+                            The minimum number of samples required to be at a leaf node in the random forest model for wind direction.
+                        max_features_WD (float):
+                            The number of features to consider when looking for the best split in the random forest model for wind direction.
+                        
+                        Returns:
                             results (list):
                                 A list of dictionaries containing information about all the correlation results for each station.
                         """
@@ -3682,48 +3761,70 @@ class Seismic:
                         file_label = 'test'):
 
                     """
-                        Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
-                        using a SVR regression model. Combines all seismic components into one model.
-                        Includes a y_test array of AWS and WD. 
-                        Multi Output model.
-                    
-                        Parameters:
-                            spectra (list):
-                                A list of dictionaries containing the frequency, power, and Wind Speed data 
-                                for each seismic component (EW, NS, Z) for each station and time period.
-                            fmin (int):
-                                Minimum frequency value for calculating the power of each bandwidths.
-                            fmax (int):
-                                Maximum frequency value for calculating the power of each  bandwidths.
-                            f_band_width (int):
-                                Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
-                            step_size (int):
-                                Frequency band step size. Set to less than f_band_width for overlapping bands. 
-                            n_repeats (int):
-                                Number of times to repeat the permutation importance calculation for each seismic component.
-                            min_WS (int):
-                                Minimum wind speed (km/hr) to be considered in analysis.
-                            poly_degree (int):
-                                Polynomial degree for the regression in plot_power_aws (Seis Power vs Obs WS)
-                            plot_stat_results (bool):
-                                Plots all the R² and rmse values against frequency bandwidth centres.
-                            plot_results (bool):
-                                Plots the predicted vs observed values for each seismic component.
-                            plot_cv (bool):
-                                Plot the cross validation results as boxplots       
-                            plot_power_aws (bool):
-                                Plot the relationship between seismic power and AWS values.
-                            variable_name (str):
-                                The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
-                            spectra (dict):
-                                A dictionary containing fft output.
-                            sample_size (int):
-                                The number of samples to use for training the model.
-
-                        Outputs:
-                            results (list):
-                                A list of dictionaries containing information about all the correlation results for each station.
-                        """
+                    Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
+                    using a SVR regression model. Combines all seismic components into one model.
+                    Includes a y_test array of AWS and WD. 
+                    Multi Output model.
+                
+                    Parameters:
+                        spectra (list):
+                            A list of dictionaries containing the frequency, power, and Wind Speed data 
+                            for each seismic component (EW, NS, Z) for each station and time period.
+                        fmin (int):
+                            Minimum frequency value for calculating the power of each bandwidths.
+                        fmax (int):
+                            Maximum frequency value for calculating the power of each  bandwidths.
+                        f_band_width (int):
+                            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+                        step_size (int):
+                            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+                        n_repeats (int):
+                            Number of times to repeat the permutation importance calculation for each seismic component.
+                        min_WS (int):
+                            Minimum wind speed (km/hr) to be considered in analysis.
+                        poly_degree (int):
+                            Polynomial degree for the regression in plot_power_aws (Seis Power vs Obs WS)
+                        plot_stat_results (bool):
+                            Plots all the R² and rmse values against frequency bandwidth centres.
+                        plot_results (bool):
+                            Plots the predicted vs observed values for each seismic component.
+                        plot_cv (bool):
+                            Plot the cross validation results as boxplots       
+                        plot_power_aws (bool):
+                            Plot the relationship between seismic power and AWS values.
+                        variable_name (str):
+                            The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
+                        spectra (dict):
+                            A dictionary containing fft output.
+                        sample_size (int):
+                            The number of samples to use for training the model.
+                        C (float):
+                            The C value for the wind speed SVR model.
+                        gamma (float):
+                            The gamma value for the wind speed SVR model.
+                        epsilon (float):
+                            The epsilon value for the wind speed SVR model.
+                        alpha_Ridge (float):
+                            The alpha value for the wind speed ridge model.
+                        alpha_Ridge_WD (float):
+                            The alpha value for the wind direction ridge model.
+                        alpha_EN (float):
+                            The alpha value for the wind speed elastic net model.
+                        l1_ratio (float):
+                            The l1 ratio value for the wind speed elastic net model.
+                        alpha_EN_WD (float):
+                            The alpha value for the wind direction elastic net model.
+                        l1_ratio_EN_WD (float):
+                            The l1 ratio value for the wind direction elastic net model.
+                        save_models (bool):
+                            True/False. If True, saves the trained models.
+                        file_label (str):
+                            A label for the saved model files.
+                                
+                    Returns:
+                        results (list):
+                            A list of dictionaries containing information about all the correlation results for each station.
+                    """
 
                     # option to input spectra from a dict
                     if spectra is not None:
@@ -4380,8 +4481,20 @@ class Seismic:
                             Plot the relationship between seismic power and AWS values.
                         variable_name (str):
                             The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
-                
-                    Outputs:
+                        alpha_EN (float):
+                            The optimal alpha value for the wind speed elastic net model.
+                        l1_ratio (float):
+                            The optimal l1 ratio value for the wind speed elastic net model.
+                        alpha_EN_WD (float):
+                            The optimal alpha value for the wind direction elastic net model.
+                        l1_ratio_EN_WD (float):
+                            The optimal l1 ratio value for the wind direction elastic net model.
+                        save_models (bool):
+                            True/False. If True, saves the trained models.
+                        file_label (str):
+                            A label for the saved model files.
+
+                    Returns:
                         results (list):
                             A list of dictionaries containing information about all the correlation results for each station.
                     """
@@ -4953,322 +5066,6 @@ class Seismic:
                             print(f"{component}: {frequency[0]:.1f} Hz, importance = {var_importance[index]:.4f}")
                 
                     return results
-                
-                def no_aws_predict_model(self, 
-                                        model_path= None,
-                                        spectra = None,
-                                        model_choice = 'EN',
-                                        date = 'Time Period',
-                                        fig_size = (15,10)):
-
-                    
-                    # option to input spectra from a dict
-                    if spectra is not None:
-                        self.seismic_wind.fft = [spectra]
-
-                    results = {}
-
-                    for station_dict in self.seismic_wind.fft:
-                        station = list(station_dict.keys())[0]
-                        
-                        if spectra is not None:
-                            station_data = station_dict[station]
-                        else:
-                            station_data = station_dict[station][0]
-
-                        # to .joblib file
-                        if model_path is not None:
-                            saved = joblib.load(model_path)
-                        else:
-                            if model_choice == 'EN':
-                                saved = self.EN_models[station]
-                            elif model_choice == 'SVR':
-                                saved = self.SVR_models[station]
-                            else:
-                                print('Invalid Model Choice')
-                                return
-
-                        var_model = saved['var_model']
-                        sin_model = saved['sin_model']
-                        cos_model = saved['cos_model']
-                        bands = saved['bands']
-
-                        EW_power = station_data['EW']
-                        NS_power = station_data['NS']
-                        Z_power = station_data['Z']
-                        freq = station_data['freq']
-
-                        n_samples = Z_power.shape[0]
-                        X_Z = np.zeros((n_samples, len(bands)))
-                        X_NS = np.zeros((n_samples, len(bands)))
-                        X_EW = np.zeros((n_samples, len(bands)))
-
-                        # Apply bandwidths to data
-                        for i, (f1,f2) in enumerate(bands):
-                            band_width = (freq >= f1) & (freq < f2)
-                
-                            # Convert to log to better inspect power scales and apply bandwidth
-                            # [:, band_width], select frequencies and slice unwanted freq data from the row
-                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
-                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
-                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
-                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
-                
-                        # Stack all together to process all together as a larger dataset
-                        X_all = np.column_stack([X_Z, X_NS, X_EW])
-
-                        # Predict!
-                        pred_WS = var_model.predict(X_all)
-                        pred_sin = sin_model.predict(X_all)
-                        pred_cos = cos_model.predict(X_all)
-                        pred_WD = np.rad2deg(np.arctan2(pred_sin, pred_cos)) % 360
-
-                        pred_WS = np.round(pred_WS, decimals=1)
-                        pred_WD = np.round(pred_WD, decimals=-1) % 360
-
-                        t = station_data['times']
-
-                        station_results = {'Predicted_WS': pred_WS, 
-                                            'Predicted_WD': pred_WD,
-                                            'times': t}
-
-                        results[station] = station_results
-                
-                        # WS vs Time
-                        plt.figure(figsize=fig_size)
-                        plt.plot(t, pred_WS, label='Predicted WS', linewidth=1.5, color = 'orange')
-                        plt.ylabel('Wind Speed (km/hr)')
-                        plt.title(f'Wind Speed Prediction: {date}')
-                        plt.xlabel('Time')
-                        plt.legend()
-   
-                    return results
-
-
-                def predict_model(self, 
-                                plot_all = True,
-                                model_path= None,
-                                spectra = None,
-                                model_choice = 'EN',
-                                date = 'Time Period',
-                                legend = True):
-
-                                    
-                                    # option to input spectra from a dict
-                                    if spectra is not None:
-                                        self.seismic_wind.fft = [spectra]
-                
-                                    results = {}
-                
-                                    for station_dict in self.seismic_wind.fft:
-                                        station = list(station_dict.keys())[0]
-                                        
-                                        if spectra is not None:
-                                            station_data = station_dict[station]
-                                        else:
-                                            station_data = station_dict[station][0]
-                
-                                        # to .joblib file
-                                        if model_path is not None:
-                                            saved = joblib.load(model_path)
-                                        else:
-                                            if model_choice == 'EN':
-                                                saved = self.EN_models[station]
-                                            elif model_choice == 'SVR':
-                                                saved = self.SVR_models[station]
-                                            else:
-                                                print('Invalid Model Choice')
-                                                return
-                
-                                        var_model = saved['var_model']
-                                        sin_model = saved['sin_model']
-                                        cos_model = saved['cos_model']
-                                        bands = saved['bands']
-                
-                                        EW_power = station_data['EW']
-                                        NS_power = station_data['NS']
-                                        Z_power = station_data['Z']
-                                        freq = station_data['freq']
-                
-                                        n_samples = Z_power.shape[0]
-                                        X_Z = np.zeros((n_samples, len(bands)))
-                                        X_NS = np.zeros((n_samples, len(bands)))
-                                        X_EW = np.zeros((n_samples, len(bands)))
-                
-                                        # Apply bandwidths to data
-                                        for i, (f1,f2) in enumerate(bands):
-                                            band_width = (freq >= f1) & (freq < f2)
-                                
-                                            # Convert to log to better inspect power scales and apply bandwidth
-                                            # [:, band_width], select frequencies and slice unwanted freq data from the row
-                                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
-                                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
-                                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
-                                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
-                                
-                                        # Stack all together to process all together as a larger dataset
-                                        X_all = np.column_stack([X_Z, X_NS, X_EW])
-                
-                                        # Predict!
-                                        pred_WS = var_model.predict(X_all)
-                                        pred_sin = sin_model.predict(X_all)
-                                        pred_cos = cos_model.predict(X_all)
-                                        pred_WD = np.rad2deg(np.arctan2(pred_sin, pred_cos)) % 360
-                
-                                        pred_WS = np.round(pred_WS, decimals=1)
-                                        pred_WD = np.round(pred_WD, decimals=-1) % 360
-                
-                                        station_results = {'Predicted_WS': pred_WS, 'Predicted_WD': pred_WD}
-                
-                                        # Evaluate
-                                        
-                                        station_results['Observed_WS'] = np.asarray(station_data['aws_values'])
-                                        
-                                        WS_error = pred_WS - station_results['Observed_WS']
-                                        station_results['WS_R2'] = r2_score(station_results['Observed_WS'], pred_WS) 
-                                        station_results['WS_RMSE'] = np.sqrt(np.mean(WS_error**2))
-                                        station_results['WS_MAE'] = np.mean(np.abs(WS_error))
-                                        station_results['WS_Std'] = np.std(WS_error, ddof=1)
-                                        station_results['Observed_WD'] = np.asarray(station_data['wind_direction'])
-                                        
-                                        WD_error = (pred_WD - station_results['Observed_WD'] + 180) % 360 - 180
-                                        station_results['WD_MAE'] = np.mean(np.abs(WD_error))
-                                        station_results['WD_RMSE'] = np.sqrt(np.mean(WD_error**2))
-                                        station_results['WD_Std'] = np.std(WD_error, ddof=1)
-                
-                
-                                        obs_WS = station_results['Observed_WS']
-                                        obs_WD = station_results['Observed_WD']
-                                        WS_bias = np.mean(WS_error)
-                                        WS_correlation, WS_p_value = pearsonr(obs_WS, pred_WS - WS_bias)
-                                        WS_error_corrected = pred_WS - WS_bias - station_results['Observed_WS']
-                                        pred_WS_bias_corrected = pred_WS - WS_bias 
-                                        WD_bias = np.rad2deg(np.arctan2(np.mean(np.sin(np.deg2rad(WD_error))), np.mean(np.cos(np.deg2rad(WD_error)))))
-                                        pred_WD_bias_corrected = (pred_WD - WD_bias) % 360
-                                        WD_error_corrected = (pred_WD_bias_corrected - station_results['Observed_WD'] + 180) % 360 - 180
-                                        WD_Std_corrected = np.std(WD_error_corrected, ddof=1)
-                
-                                        station_results['WD_Bias'] = WD_bias
-                                        station_results['WD_Std_corrected'] = WD_Std_corrected  
-                                        station_results['WD_MAE_corrected'] = np.mean(np.abs(WD_error_corrected))
-                
-                                        
-                                        results[station] = station_results
-                
-                                        
-                                            
-                                        t = station_data['time']
-                                
-                                        # WS vs Time
-                                        plt.figure(figsize=(10, 10))
-                                        plt.plot(t,  obs_WS / 3.6, label='Observed WS', linewidth=1.5, color = 'royalblue')
-                                        plt.plot(t, pred_WS_bias_corrected / 3.6, label='Bias Corrected Predicted WS', linewidth=1.5, color = 'orange')
-                                        plt.fill_between(t, pred_WS_bias_corrected / 3.6 - station_results['WS_Std'] / 3.6, 
-                                                            pred_WS_bias_corrected / 3.6 + station_results['WS_Std'] / 3.6,alpha=0.2, color = 'peru',
-                                                            label=r'Bias Corrected Predicted WS $\pm 1\sigma$')
-                                        plt.ylabel('Wind Speed (m/s)', fontsize=14)
-                                        plt.title(f'{date}', fontsize=16)
-                                        plt.xlabel('Time', fontsize =14 )
-                                        plt.xticks(fontsize =14, rotation=45)
-                                        plt.yticks(fontsize =14 )
-                                        if legend == True:
-                                            plt.legend(fontsize=11)
-                                        
-                                        print(f'R^2 Obs and bias-corrected Prediction: {WS_correlation**2}')
-                                        print(f'p value Obs and bias-corrected Prediction: {WS_p_value}')
-
-                                        if plot_all == True: 
-                                            # WS Obs vs Pred
-                                            plt.figure(figsize=(10, 10))
-                                            plt.scatter(obs_WS, pred_WS_bias_corrected ,alpha=0.7, s=100, label='Observed vs Predicted')
-                                            # y = x line
-                                            limits = [min(obs_WS.min(), pred_WS_bias_corrected.min()),
-                                                    max(obs_WS.max(), pred_WS_bias_corrected.max())]
-                                            plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
-                                            plt.xlabel('Observed Wind Speed (km/hr)', fontsize=20)
-                                            plt.ylabel('Bias-Corrected Predicted Wind Speed (km/hr)', fontsize=20)
-                                            plt.title(f'Obs vs Pred Wind Speed: {date} ', fontsize=25)
-                                            plt.xticks(fontsize=20)
-                                            plt.yticks(fontsize=20)
-                                            plt.legend(fontsize=16, loc='upper left')
-                                            plt.grid(alpha=0.3)
-                                            plt.tight_layout()
-                
-                                            # WS Error vs Time
-                                            plt.figure(figsize=(12, 5))
-                                            plt.plot(t, WS_error_corrected)
-                                            plt.axhline(0, color='red', linestyle='--')
-                                            plt.xlabel('Time')
-                                            plt.ylabel('Wind Speed Error (km/hr)')
-                                            plt.title(f'Wind Speed Prediction Error: {date}')
-                                            plt.grid(alpha=0.3)
-                                            plt.tight_layout()
-                                            plt.show()
-                
-                                            # WD Error vs Time
-                                            plt.figure(figsize=(12, 5))
-                                            plt.plot(t, WD_error_corrected)
-                                            plt.axhline(0, color='red', linestyle='--')
-                                            plt.axhline(180, color='grey', linestyle=':')
-                                            plt.axhline(-180, color='grey', linestyle=':')
-                                            plt.xlabel('Time')
-                                            plt.ylabel('Bias-corrected WD Error (°)')
-                                            plt.title(f'Bias-corrected Wind Direction Error: {date} ')
-                                            plt.grid(alpha=0.3)
-                                            plt.tight_layout()
-                                            plt.show()
-                
-                                            # WD Obs vs Pred
-                                            plt.figure(figsize=(10, 10))
-                                            plt.scatter(obs_WD, pred_WD_bias_corrected,alpha=0.7, s=100, label='Observed vs Predicted')
-                                            # y = x line
-                                            limits = [min(obs_WD.min(), pred_WD_bias_corrected.min()),
-                                                    max(obs_WD.max(), pred_WD_bias_corrected.max())]
-                                            plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
-                                            plt.xlabel('Observed Wind Direction (°)', fontsize=20)
-                                            plt.ylabel('Predicted Wind Direction (°)', fontsize=20)
-                                            plt.title(f'Obs vs Pred Wind Direction {date}', fontsize=25)
-                                            plt.xticks(fontsize=20)
-                                            plt.yticks(fontsize=20)
-                                            plt.legend(fontsize=16, loc='upper left')
-                                            plt.grid(alpha=0.3)
-                                            plt.tight_layout()
-                
-                                            # Polar plot
-                                            cardinals = {"N": 0,           
-                                                        "E": (np.pi / 2),
-                                                        "S": (np.pi),
-                                                        "W": (3 * np.pi / 2)}
-                                            plt.figure(figsize=(10,6))
-                                            ax = plt.subplot(projection='polar')
-                                            plt.polar()              
-                                            obs = ax.scatter(np.deg2rad(obs_WD), obs_WS, alpha=0.7,s = 60, label = f'Observed Wind', marker='x')
-                                            pred = ax.scatter(np.deg2rad(pred_WD_bias_corrected), pred_WS_bias_corrected, alpha=0.7, s = 60, label = f'Predicted Wind', marker='^')
-                                            for i in range(len(pred_WD_bias_corrected)):
-                                                ax.plot([np.deg2rad(obs_WD[i]), np.deg2rad(pred_WD_bias_corrected[i])], [obs_WS[i], pred_WS_bias_corrected[i]], color='grey', alpha=1, linewidth=0.8)
-                                            # Make it pretty
-                                            ax.set_theta_zero_location('N')
-                                            ax.set_theta_direction(-1)
-                                            ax.set_ylabel(f'Wind Speed', labelpad=55, fontsize = 12)
-                                            ax.set_title(f"Wind Speed and Direction: {date}", pad = 60, fontsize = 25)
-                                            ax.set_rlabel_position(0)
-                                            ax.tick_params(labelsize = 12)
-                                            rmax = ax.get_rmax()
-                                            # Add cardinal direction labels
-                                            for label, angle in cardinals.items():
-                                                            ax.text(
-                                                                angle,
-                                                                rmax * 1.3,
-                                                                label,
-                                                                ha="center",
-                                                                va="center",
-                                                                fontsize=15,
-                                                                fontweight="bold",
-                                                                clip_on=False)                            
-                                            plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
-                                            plt.tight_layout()
-                
-                                    return results
 
                 def Ridge(self,
                           fmin = 1,
@@ -5320,8 +5117,12 @@ class Seismic:
                             Plot the relationship between seismic power and AWS values.
                         variable_name (str):
                             The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
-                
-                    Outputs:
+                        alpha_Ridge (float):
+                            The alpha value for the wind speed ridge model.
+                        alpha_Ridge_WD (float):
+                            The alpha value for the wind direction ridge model.
+
+                    Returns:
                         results (list):
                             A list of dictionaries containing information about all the correlation results for each station.
                     """
@@ -5860,6 +5661,369 @@ class Seismic:
                 
                     return results
 
+                # Predict!
+                def no_aws_predict_model(self, 
+                                        model_path= None,
+                                        spectra = None,
+                                        model_choice = 'EN',
+                                        date = 'Time Period',
+                                        fig_size = (15,10)):
+                    """
+                    Parameters:
+                        model_path (str):
+                            Path to the specified .joblib file.
+                            If None, then self model used.
+                        spectra (dict):
+                            Dictionary containing the seismic spectra data for prediction.
+                            If None, then self spectra used.
+                        model_choice (str):
+                            Options currently include 'EN' and 'SVR'. 
+                            Specify which self model to use.
+                        date (str):
+                            Date label for plotting.
+                        fig_size (duple):
+                            Specify figure size.
+
+                    Returns:
+                        results (dict):
+                            A dictionary containing model predictions.
+                    """
+
+                    
+                    # Option to input spectra from a dict
+                    if spectra is not None:
+                        self.seismic_wind.fft = [spectra]
+
+                    # Establish results dict
+                    results = {}
+
+                    # Gather fft data
+                    for station_dict in self.seismic_wind.fft:
+                        station = list(station_dict.keys())[0]
+                        
+                        if spectra is not None:
+                            station_data = station_dict[station]
+                        else:
+                            station_data = station_dict[station][0]
+
+                        # to .joblib file
+                        if model_path is not None:
+                            saved = joblib.load(model_path)
+                        else:
+                            if model_choice == 'EN':
+                                saved = self.EN_models[station]
+                            elif model_choice == 'SVR':
+                                saved = self.SVR_models[station]
+                            else:
+                                print('Invalid Model Choice')
+                                return
+
+                        var_model = saved['var_model']
+                        sin_model = saved['sin_model']
+                        cos_model = saved['cos_model']
+                        bands = saved['bands']
+
+                        EW_power = station_data['EW']
+                        NS_power = station_data['NS']
+                        Z_power = station_data['Z']
+                        freq = station_data['freq']
+
+                        n_samples = Z_power.shape[0]
+                        X_Z = np.zeros((n_samples, len(bands)))
+                        X_NS = np.zeros((n_samples, len(bands)))
+                        X_EW = np.zeros((n_samples, len(bands)))
+
+                        # Apply bandwidths to data
+                        for i, (f1,f2) in enumerate(bands):
+                            band_width = (freq >= f1) & (freq < f2)
+                
+                            # Convert to log to better inspect power scales and apply bandwidth
+                            # [:, band_width], select frequencies and slice unwanted freq data from the row
+                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+                
+                        # Stack all together to process all together as a larger dataset
+                        X_all = np.column_stack([X_Z, X_NS, X_EW])
+
+                        # Predict!
+                        pred_WS = var_model.predict(X_all)
+                        pred_sin = sin_model.predict(X_all)
+                        pred_cos = cos_model.predict(X_all)
+                        pred_WD = np.rad2deg(np.arctan2(pred_sin, pred_cos)) % 360
+
+                        pred_WS = np.round(pred_WS, decimals=1)
+                        pred_WD = np.round(pred_WD, decimals=-1) % 360
+
+                        t = station_data['times']
+
+                        station_results = {'Predicted_WS': pred_WS, 
+                                            'Predicted_WD': pred_WD,
+                                            'times': t}
+
+                        results[station] = station_results
+                
+                        # WS vs Time
+                        plt.figure(figsize=fig_size)
+                        plt.plot(t, pred_WS, label='Predicted WS', linewidth=1.5, color = 'orange')
+                        plt.ylabel('Wind Speed (km/hr)')
+                        plt.title(f'Wind Speed Prediction: {date}')
+                        plt.xlabel('Time')
+                        plt.legend()
+   
+                    return results
+
+                def predict_model(self, 
+                                plot_all = True,
+                                model_path= None,
+                                spectra = None,
+                                model_choice = 'EN',
+                                date = 'Time Period',
+                                legend = True):
+
+                    """
+                    Parameters:
+                        plot_all (bool):
+                            True/False. If True plot all figures. 
+                            If False, only predicted WS vs Time is plotted
+                        model_path (str):
+                            Path to the specified .joblib file.
+                            If None, then self model used.
+                        spectra (dict):
+                            Dictionary containing the seismic spectra data for prediction.
+                            If None, then self spectra used.
+                        model_choice (str):
+                            Options currently include 'EN' and 'SVR'. 
+                            Specify which self model to use.
+                        date (str):
+                            Date label for plotting.
+                        legend (bool):
+                            True/False. If True plot legend.
+
+                    Returns:
+                        results (dict):
+                            A dictionary containing model predictions.
+                    """
+
+                                    
+                    # option to input spectra from a dict
+                    if spectra is not None:
+                        self.seismic_wind.fft = [spectra]
+
+                    results = {}
+
+                    for station_dict in self.seismic_wind.fft:
+                        station = list(station_dict.keys())[0]
+                        
+                        if spectra is not None:
+                            station_data = station_dict[station]
+                        else:
+                            station_data = station_dict[station][0]
+
+                        # to .joblib file
+                        if model_path is not None:
+                            saved = joblib.load(model_path)
+                        else:
+                            if model_choice == 'EN':
+                                saved = self.EN_models[station]
+                            elif model_choice == 'SVR':
+                                saved = self.SVR_models[station]
+                            else:
+                                print('Invalid Model Choice')
+                                return
+
+                        var_model = saved['var_model']
+                        sin_model = saved['sin_model']
+                        cos_model = saved['cos_model']
+                        bands = saved['bands']
+
+                        EW_power = station_data['EW']
+                        NS_power = station_data['NS']
+                        Z_power = station_data['Z']
+                        freq = station_data['freq']
+
+                        n_samples = Z_power.shape[0]
+                        X_Z = np.zeros((n_samples, len(bands)))
+                        X_NS = np.zeros((n_samples, len(bands)))
+                        X_EW = np.zeros((n_samples, len(bands)))
+
+                        # Apply bandwidths to data
+                        for i, (f1,f2) in enumerate(bands):
+                            band_width = (freq >= f1) & (freq < f2)
+                
+                            # Convert to log to better inspect power scales and apply bandwidth
+                            # [:, band_width], select frequencies and slice unwanted freq data from the row
+                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+                
+                        # Stack all together to process all together as a larger dataset
+                        X_all = np.column_stack([X_Z, X_NS, X_EW])
+
+                        # Predict!
+                        pred_WS = var_model.predict(X_all)
+                        pred_sin = sin_model.predict(X_all)
+                        pred_cos = cos_model.predict(X_all)
+                        pred_WD = np.rad2deg(np.arctan2(pred_sin, pred_cos)) % 360
+
+                        pred_WS = np.round(pred_WS, decimals=1)
+                        pred_WD = np.round(pred_WD, decimals=-1) % 360
+
+                        station_results = {'Predicted_WS': pred_WS, 'Predicted_WD': pred_WD}
+
+                        # Evaluate
+                        
+                        station_results['Observed_WS'] = np.asarray(station_data['aws_values'])
+                        
+                        WS_error = pred_WS - station_results['Observed_WS']
+                        station_results['WS_R2'] = r2_score(station_results['Observed_WS'], pred_WS) 
+                        station_results['WS_RMSE'] = np.sqrt(np.mean(WS_error**2))
+                        station_results['WS_MAE'] = np.mean(np.abs(WS_error))
+                        station_results['WS_Std'] = np.std(WS_error, ddof=1)
+                        station_results['Observed_WD'] = np.asarray(station_data['wind_direction'])
+                        
+                        WD_error = (pred_WD - station_results['Observed_WD'] + 180) % 360 - 180
+                        station_results['WD_MAE'] = np.mean(np.abs(WD_error))
+                        station_results['WD_RMSE'] = np.sqrt(np.mean(WD_error**2))
+                        station_results['WD_Std'] = np.std(WD_error, ddof=1)
+
+
+                        obs_WS = station_results['Observed_WS']
+                        obs_WD = station_results['Observed_WD']
+                        WS_bias = np.mean(WS_error)
+                        WS_correlation, WS_p_value = pearsonr(obs_WS, pred_WS - WS_bias)
+                        WS_error_corrected = pred_WS - WS_bias - station_results['Observed_WS']
+                        pred_WS_bias_corrected = pred_WS - WS_bias 
+                        WD_bias = np.rad2deg(np.arctan2(np.mean(np.sin(np.deg2rad(WD_error))), np.mean(np.cos(np.deg2rad(WD_error)))))
+                        pred_WD_bias_corrected = (pred_WD - WD_bias) % 360
+                        WD_error_corrected = (pred_WD_bias_corrected - station_results['Observed_WD'] + 180) % 360 - 180
+                        WD_Std_corrected = np.std(WD_error_corrected, ddof=1)
+
+                        station_results['WD_Bias'] = WD_bias
+                        station_results['WD_Std_corrected'] = WD_Std_corrected  
+                        station_results['WD_MAE_corrected'] = np.mean(np.abs(WD_error_corrected))
+
+                        
+                        results[station] = station_results
+
+                        
+                            
+                        t = station_data['time']
+                
+                        # WS vs Time
+                        plt.figure(figsize=(10, 10))
+                        plt.plot(t,  obs_WS / 3.6, label='Observed WS', linewidth=1.5, color = 'royalblue')
+                        plt.plot(t, pred_WS_bias_corrected / 3.6, label='Bias Corrected Predicted WS', linewidth=1.5, color = 'orange')
+                        plt.fill_between(t, pred_WS_bias_corrected / 3.6 - station_results['WS_Std'] / 3.6, 
+                                            pred_WS_bias_corrected / 3.6 + station_results['WS_Std'] / 3.6,alpha=0.2, color = 'peru',
+                                            label=r'Bias Corrected Predicted WS $\pm 1\sigma$')
+                        plt.ylabel('Wind Speed (m/s)', fontsize=14)
+                        plt.title(f'{date}', fontsize=16)
+                        plt.xlabel('Time', fontsize =14 )
+                        plt.xticks(fontsize =14, rotation=45)
+                        plt.yticks(fontsize =14 )
+                        if legend == True:
+                            plt.legend(fontsize=11)
+                        
+                        print(f'R^2 Obs and bias-corrected Prediction: {WS_correlation**2}')
+                        print(f'p value Obs and bias-corrected Prediction: {WS_p_value}')
+
+                        if plot_all == True: 
+                            # WS Obs vs Pred
+                            plt.figure(figsize=(10, 10))
+                            plt.scatter(obs_WS, pred_WS_bias_corrected ,alpha=0.7, s=100, label='Observed vs Predicted')
+                            # y = x line
+                            limits = [min(obs_WS.min(), pred_WS_bias_corrected.min()),
+                                    max(obs_WS.max(), pred_WS_bias_corrected.max())]
+                            plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
+                            plt.xlabel('Observed Wind Speed (km/hr)', fontsize=20)
+                            plt.ylabel('Bias-Corrected Predicted Wind Speed (km/hr)', fontsize=20)
+                            plt.title(f'Obs vs Pred Wind Speed: {date} ', fontsize=25)
+                            plt.xticks(fontsize=20)
+                            plt.yticks(fontsize=20)
+                            plt.legend(fontsize=16, loc='upper left')
+                            plt.grid(alpha=0.3)
+                            plt.tight_layout()
+
+                            # WS Error vs Time
+                            plt.figure(figsize=(12, 5))
+                            plt.plot(t, WS_error_corrected)
+                            plt.axhline(0, color='red', linestyle='--')
+                            plt.xlabel('Time')
+                            plt.ylabel('Wind Speed Error (km/hr)')
+                            plt.title(f'Wind Speed Prediction Error: {date}')
+                            plt.grid(alpha=0.3)
+                            plt.tight_layout()
+                            plt.show()
+
+                            # WD Error vs Time
+                            plt.figure(figsize=(12, 5))
+                            plt.plot(t, WD_error_corrected)
+                            plt.axhline(0, color='red', linestyle='--')
+                            plt.axhline(180, color='grey', linestyle=':')
+                            plt.axhline(-180, color='grey', linestyle=':')
+                            plt.xlabel('Time')
+                            plt.ylabel('Bias-corrected WD Error (°)')
+                            plt.title(f'Bias-corrected Wind Direction Error: {date} ')
+                            plt.grid(alpha=0.3)
+                            plt.tight_layout()
+                            plt.show()
+
+                            # WD Obs vs Pred
+                            plt.figure(figsize=(10, 10))
+                            plt.scatter(obs_WD, pred_WD_bias_corrected,alpha=0.7, s=100, label='Observed vs Predicted')
+                            # y = x line
+                            limits = [min(obs_WD.min(), pred_WD_bias_corrected.min()),
+                                    max(obs_WD.max(), pred_WD_bias_corrected.max())]
+                            plt.plot(limits, limits,'r--', linewidth=4, label='y = x')
+                            plt.xlabel('Observed Wind Direction (°)', fontsize=20)
+                            plt.ylabel('Predicted Wind Direction (°)', fontsize=20)
+                            plt.title(f'Obs vs Pred Wind Direction {date}', fontsize=25)
+                            plt.xticks(fontsize=20)
+                            plt.yticks(fontsize=20)
+                            plt.legend(fontsize=16, loc='upper left')
+                            plt.grid(alpha=0.3)
+                            plt.tight_layout()
+
+                            # Polar plot
+                            cardinals = {"N": 0,           
+                                        "E": (np.pi / 2),
+                                        "S": (np.pi),
+                                        "W": (3 * np.pi / 2)}
+                            plt.figure(figsize=(10,6))
+                            ax = plt.subplot(projection='polar')
+                            plt.polar()              
+                            obs = ax.scatter(np.deg2rad(obs_WD), obs_WS, alpha=0.7,s = 60, label = f'Observed Wind', marker='x')
+                            pred = ax.scatter(np.deg2rad(pred_WD_bias_corrected), pred_WS_bias_corrected, alpha=0.7, s = 60, label = f'Predicted Wind', marker='^')
+                            for i in range(len(pred_WD_bias_corrected)):
+                                ax.plot([np.deg2rad(obs_WD[i]), np.deg2rad(pred_WD_bias_corrected[i])], [obs_WS[i], pred_WS_bias_corrected[i]], color='grey', alpha=1, linewidth=0.8)
+                            # Make it pretty
+                            ax.set_theta_zero_location('N')
+                            ax.set_theta_direction(-1)
+                            ax.set_ylabel(f'Wind Speed', labelpad=55, fontsize = 12)
+                            ax.set_title(f"Wind Speed and Direction: {date}", pad = 60, fontsize = 25)
+                            ax.set_rlabel_position(0)
+                            ax.tick_params(labelsize = 12)
+                            rmax = ax.get_rmax()
+                            # Add cardinal direction labels
+                            for label, angle in cardinals.items():
+                                            ax.text(
+                                                angle,
+                                                rmax * 1.3,
+                                                label,
+                                                ha="center",
+                                                va="center",
+                                                fontsize=15,
+                                                fontweight="bold",
+                                                clip_on=False)                            
+                            plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
+                            plt.tight_layout()
+
+                    return results
+
+                # Compare models
                 def compare_models(self,
                                    fmin = 3,
                                    fmax = 49,
@@ -6112,346 +6276,3 @@ class Seismic:
                         results.append(station_results)
                 
                     return results
-
-                def polar_Ridge(self,
-                                fmin = 1,
-                                fmax = 49,
-                                f_band_width = 1,
-                                step_size = 1,
-                                n_repeats = 3,
-                                min_WS = None,
-                                poly_degree = 2,
-                                plot_importance = True,
-                                plot_results = True,
-                                plot_polar = True,
-                                plot_power_aws = True,
-                                variable_name = 'AWS Wind Speed (km/hr)',
-                                alpha = 0.08):
-
-                    """
-                    Predicts AWS variable and Wind Direction from multiple seismic frequency band power features 
-                    using a Ridge regression model. 
-                    Converts the channel power into polar coordinates.
-                    Inputs the radial component, combined seismic power magnitude,
-                    to model wind speed.
-                    Inputs the theta, horizontal power direction component,
-                    to model wind direction. This isnt really a useful metric.
-                    Multi Output model.
-                
-                    Parameters:
-                        spectra (list):
-                            A list of dictionaries containing the frequency, power, and Wind Speed data 
-                            for each seismic component (EW, NS, Z) for each station and time period.
-                        fmin (int):
-                            Minimum frequency value for calculating the power of each bandwidths.
-                        fmax (int):
-                            Maximum frequency value for calculating the power of each  bandwidths.
-                        f_band_width (int):
-                            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
-                        step_size (int):
-                            Frequency band step size. Set to less than f_band_width for overlapping bands. 
-                        n_repeats (int):
-                            Number of times to repeat the permutation importance calculation for each seismic component.
-                        min_WS (int):
-                            Minimum wind speed (km/hr) to be considered in analysis.
-                        poly_degree (int):
-                            Polynomial degree for the regression in plot_power_aws (Seis Power vs Obs WS)
-                        plot_stat_results (bool):
-                            Plots all the R² and rmse values against frequency bandwidth centres.
-                        plot_results (bool):
-                            Plots the predicted vs observed values for each seismic component.
-                        plot_cv (bool):
-                            Plot the cross validation results as boxplots       
-                        plot_power_aws (bool):
-                            Plot the relationship between seismic power and AWS values.
-                        variable_name (str):
-                            The name of the variable being predicted (e.g., 'AWS Wind Speed (km/hr)').
-                
-                    Outputs:
-                        results (list):
-                            A list of dictionaries containing information about all the correlation results for each station.
-                    """
-
-                    # Setup Result Lists
-                    results = []
-                    
-                    # Bands
-                    # Create Bandwidths
-                    bands = []
-                    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
-                        f2 = f1 + f_band_width
-                        band = (f1, f2)
-                        bands.append(band)
-                    # Num of Bands
-                    n_bands = len(bands)
-                    # Create Band Centers
-                    band_centres = []
-                    for f1, f2 in bands:
-                        band_centre = [(f1 + f2)/2]
-                        band_centres.append(band_centre)
-                
-                    # Loop through stations
-                    for station_dict in self.seismic_wind.fft:
-                
-                        # Setup Variables
-                        station = list(station_dict.keys())[0] 
-                        EW_power = station_dict[station][0]['EW']
-                        NS_power = station_dict[station][0]['NS']
-                        Z_power = station_dict[station][0]['Z']
-                        freq = station_dict[station][0]['freq']
-                        aws_values = station_dict[station][0]['aws_values']
-                        wind_direction = station_dict[station][0]['wind_direction']
-                        relative_phase = station_dict[station][0]['relative_phase']
-
-                        # Polar coords
-                        r = np.sqrt(EW_power**2 + NS_power**2 + Z_power**2)
-                        #theta = np.arctan2(NS_power, EW_power)  # Horizontal Power Orientation
-                        theta = relative_phase # Relative horizontal signal phase
-                        # Phi not needed here. AWS doesnt capture phi
-
-                        # Wrap Around Problem
-                        # AWS Data
-                        dir_radians = np.deg2rad(wind_direction)
-                        dir_sin = np.sin(dir_radians)
-                        dir_cos = np.cos(dir_radians)
-
-                        # Seismic theta
-                        theta_sin = np.sin(theta)
-                        theta_cos = np.cos(theta)
-
-                        # Setup results
-                        station_results = []
-                        
-                        # Setup powers
-                        X_r = np.zeros((len(aws_values), len(bands)))
-                        X_theta_sin = np.zeros((len(aws_values), len(bands)))
-                        X_theta_cos = np.zeros((len(aws_values), len(bands)))
-
-                        # Apply bandwidths to data
-                        for i, (f1,f2) in enumerate(bands):
-                            band_width = (freq >= f1) & (freq < f2)
-                            X_r[:, i] = np.log10(r[:, band_width].mean(axis=1) + 1e-20)
-                            X_theta_sin[:, i] = (theta_sin[:, band_width].mean(axis=1))
-                            X_theta_cos[:, i] = (theta_cos[:, band_width].mean(axis=1))
-
-                        # Direction Stacks
-                        X_theta_dir = np.column_stack([X_theta_sin, X_theta_cos])
-                        y_aws_dir = np.column_stack([dir_sin, dir_cos])
-
-                        # Minimum Wind Speed Threshold
-                        if min_WS is not None:
-                            mask_aws = aws_values > min_WS
-                            X_r = X_r[mask_aws]
-                            X_theta_dir = X_theta_dir[mask_aws]
-                            y_aws_dir = y_aws_dir[mask_aws]
-                            aws_values = aws_values[mask_aws]
-
-                        # Wind Speed Model
-                        X_r_train, X_r_test, y_aws_values_train, y_aws_values_test = train_test_split(X_r, aws_values, test_size=0.2, random_state=42)
-                        # Wind Direction Model
-                        X_theta_dir_train, X_theta_dir_test, y_aws_dir_train, y_aws_dir_test = train_test_split(X_theta_dir, y_aws_dir, test_size=0.2, random_state=42)
-
-                        # Pipeline
-                        # Scale, Ridge 
-                        var_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha))])
-                        sin_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha))])
-                        cos_model = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha))])
-
-                        # CV
-                        cv = KFold(n_splits=5, shuffle=True, random_state=42)
-                        var_scores = cross_val_score(var_model, X_r_train, y_aws_values_train, cv=cv, scoring='r2')
-                        sin_scores = cross_val_score(sin_model, X_theta_dir_train, y_aws_dir_train[:, 0], cv=cv, scoring='r2')
-                        cos_scores = cross_val_score(cos_model, X_theta_dir_train, y_aws_dir_train[:, 1], cv=cv, scoring='r2')
-                
-                        # Fit Model
-                        var_model.fit(X_r_train, y_aws_values_train)
-                        sin_model.fit(X_theta_dir_train, y_aws_dir_train[:, 0])
-                        cos_model.fit(X_theta_dir_train, y_aws_dir_train[:, 1])
-
-                        # Predictions
-                        var_pred = var_model.predict(X_r_test)
-                        sin_pred = sin_model.predict(X_theta_dir_test)
-                        cos_pred = cos_model.predict(X_theta_dir_test)
-
-                        # Round WS Prediction to one decimal so it matches with AWS Measurement
-                        var_pred = np.round(var_pred, decimals=1)
-
-                        # Observed
-                        y_var_test = y_aws_values_test
-                        y_sin_test = y_aws_dir_test[:, 0]
-                        y_cos_test = y_aws_dir_test[:, 1]
-
-                        # Predicted direction
-                        dir_pred_radian = np.arctan2(sin_pred, cos_pred)
-                        dir_pred = np.rad2deg(dir_pred_radian)
-
-                        # Round to nearest 10 degrees
-                        dir_pred = np.round(dir_pred, decimals=-1)
-                        
-                        # Wrap back to 0-360 degrees
-                        dir_pred = dir_pred % 360 
-
-                        # Fix angles near end points
-                        dir_test_radian = np.arctan2(y_sin_test, y_cos_test)
-                        dir_test = np.rad2deg(dir_test_radian) % 360
-                        dir_fix = np.abs((dir_pred - dir_test + 180) % 360 - 180)
-                
-                        # Mean direction
-                        dir_mean = np.mean(dir_fix)
-
-                        # rmse
-                        var_rmse = np.sqrt(mean_squared_error(y_var_test, var_pred))
-                        sin_rmse = np.sqrt(mean_squared_error(y_sin_test, sin_pred))
-                        cos_rmse = np.sqrt(mean_squared_error(y_cos_test, cos_pred))
-                        dir_rmse = np.sqrt(np.mean(dir_fix**2))
-                
-                        # R²
-                        var_r2 = r2_score(y_var_test, var_pred)
-                        sin_r2 = r2_score(y_sin_test, sin_pred)
-                        cos_r2 = r2_score(y_cos_test, cos_pred)
-
-                        # Freq Importance
-                        var_importance = permutation_importance(var_model, X_r_test, y_var_test, n_repeats=n_repeats, scoring='r2').importances_mean
-                        sin_importance = permutation_importance(sin_model, X_theta_dir_test, y_sin_test, n_repeats=n_repeats, scoring='r2').importances_mean
-                        cos_importance = permutation_importance(cos_model, X_theta_dir_test, y_cos_test, n_repeats=n_repeats, scoring='r2').importances_mean
-
-                        # Print best result
-                        # R²
-                        print(f"{variable_name} R²: {var_r2:.4f}")
-                        print(f"Sin R²: {sin_r2:.4f}")
-                        print(f"Cos R²: {cos_r2:.4f}")
-
-                        # rmse
-                        print(f"{variable_name} rmse: {var_rmse:.4f}")
-                        print(f"Sin rmse: {sin_rmse:.4f}")
-                        print(f"Cos rmse: {cos_rmse:.4f}")
-                
-                        # Cross Validation R²
-                        print(f"{variable_name} cv R²: {var_scores.mean():.4f} +/- {var_scores.std():.4f}")
-                        print(f"Sin cv R²: {sin_scores.mean():.4f} +/- {sin_scores.std():.4f}")
-                        print(f"Cos cv R²: {cos_scores.mean():.4f} +/- {cos_scores.std():.4f}")
-                        results.append(station_results)
-                
-                        # WD
-                        print(f"Wind direction Mean Error: {dir_mean:.2f}°")
-                        print(f"Wind direction RMSE: {dir_rmse:.2f}°")
-
-                        # Plot freq importance
-                        if plot_importance == True:
-                            # Plot
-                            fig, ax = plt.subplots(1, 3, figsize=(8, 6))
-                            ax[0].plot(band_centres, var_importance)
-                            ax[0].set_title(f'R: {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
-
-                            ax[1].plot(band_centres, sin_importance[:n_bands])
-                            ax[1].set_title(f'Sin: {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
-                            
-                            ax[2].plot(band_centres, cos_importance[n_bands:2*n_bands])
-                            ax[2].set_title(f'Cos: {variable_name} \n Permutation Importance \n Acrosss Freq Spectrum')
-                            
-                            fig.suptitle(f'{station}:')
-                            fig.supxlabel('Frequency (Hz)')
-                            fig.supylabel('RF Permutation Importance')
-                            fig.tight_layout()                                        
-
-                        # Obs vs Pred
-                        if plot_results == True:
-                            #Plot obs vs pred WS
-                            # AWS Variable
-                            # Plot
-                            plt.figure(figsize=(10, 10))
-                            plt.scatter(y_var_test, var_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
-                
-                            # y = x line
-                            plt.plot([y_var_test.min(), y_var_test.max()],
-                                    [y_var_test.min(), y_var_test.max()],
-                                    'r--', linewidth = 4, label = 'y = x')
-                            # Make it pretty
-                            plt.xlabel(f"Observed {variable_name}", fontsize = 20)
-                            plt.ylabel(f"Predicted {variable_name}", fontsize = 20)
-                            plt.title(f"{station} {variable_name}", fontsize = 25)
-                            plt.xticks(fontsize = 20)
-                            plt.yticks(fontsize = 20)
-                            plt.legend(fontsize = 20, loc ='upper left')
-                            plt.tight_layout()
-
-                            # Plot obs vs pred Wind Direction
-                            # sin2theta and cos2theta
-                            fig, ax = plt.subplots(2,1, figsize=(10, 10))
-                            ax[0].scatter(y_sin_test, sin_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
-                            ax[1].scatter(y_cos_test, cos_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
-                            
-                            # y = x line
-                            ax[0].plot([y_sin_test.min(), y_sin_test.max()],
-                                    [y_sin_test.min(), y_sin_test.max()],
-                                    'r--', linewidth = 4, label = 'y = x')
-                            ax[1].plot([y_cos_test.min(), y_cos_test.max()],
-                                    [y_cos_test.min(), y_cos_test.max()],
-                                    'r--', linewidth = 4, label = 'y = x')
-                            # Make it pretty
-                            ax[0].set_xlabel("Observed Wind Direction Sin2Theta", fontsize = 20)
-                            ax[0].set_ylabel("Predicted Wind Direction Sin2Theta", fontsize = 20)
-                            ax[0].set_title(f"{station} Wind Direction Sin2Theta", fontsize = 25)
-                            ax[1].set_xlabel("Observed Wind Direction Cos2Theta", fontsize = 20)
-                            ax[1].set_ylabel("Predicted Wind Direction Cos2Theta", fontsize = 20)
-                            ax[1].set_title(f"{station} Wind Direction Cos2Theta", fontsize = 25)
-                            ax[0].tick_params(axis='both', which='major', labelsize=20)
-                            ax[1].tick_params(axis='both', which='major', labelsize=20)
-                            fig.tight_layout()
-                
-                            # Sin and Cos Converted back to angle
-                            plt.figure(figsize=(10, 10))
-                            plt.scatter(dir_test, dir_pred, alpha=0.7, s = 100, label ='Observed Data > Wind Speed Threshold')
-                            
-                            # y = x line
-                            plt.plot([dir_test.min(), dir_test.max()],
-                                    [dir_test.min(), dir_test.max()],
-                                    'r--', linewidth = 4, label = 'y = x')
-                            # Make it pretty
-                            plt.xlabel("Observed Wind Direction (°)", fontsize = 20)
-                            plt.ylabel("Predicted Wind Direction (°)", fontsize = 20)
-                            plt.title(f"{station} Wind Direction (°)", fontsize = 25)
-                            plt.xticks(fontsize = 20)
-                            plt.yticks(fontsize = 20)
-                            plt.legend(fontsize = 20, loc ='upper left')
-                            plt.tight_layout()
-                
-                        # Polar plots
-                        if plot_polar == True:
-                            #Create plot
-                            plt.figure(figsize=(10,6))
-                            ax = plt.subplot(projection='polar')
-                            plt.polar()
-
-                            obs = ax.scatter(dir_test_radian, y_var_test, alpha=0.7, s = 60, label = f'Observed {variable_name}', marker='x')
-                            pred = ax.scatter(np.deg2rad(dir_pred), var_pred, alpha=0.7, s = 60, label = f'Predicted {variable_name}', marker='^')
-
-                            # Make it pretty
-                            ax.set_theta_zero_location('N')
-                            ax.set_theta_direction(-1)
-                            ax.set_ylabel(f'{variable_name}', labelpad=55, fontsize = 12)
-                            ax.set_title(f"{station}: {variable_name} and Wind Direction", pad = 60, fontsize = 25)
-                            ax.set_rlabel_position(0)
-                            ax.tick_params(labelsize = 12)
-                            rmax = ax.get_rmax()
-
-                            cardinals = {"N": 0,           
-                            "E": (np.pi / 2),
-                            "S": (np.pi),
-                            "W": (3 * np.pi / 2)}
-
-                            # Add cardinal direction labels
-                            for label, angle in cardinals.items():
-                                            ax.text(
-                                                angle,
-                                                rmax * 1.3,
-                                                label,
-                                                ha="center",
-                                                va="center",
-                                                fontsize=15,
-                                                fontweight="bold",
-                                                clip_on=False)
-                            # More pretty
-                            plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
-
-                            plt.tight_layout()

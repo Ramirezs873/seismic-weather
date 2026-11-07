@@ -998,7 +998,8 @@ class Seismic:
                    Z_channel = None,
                    misalignment_angle = None,
                    save_mseed=False,
-                   file_name='default_rotate'):
+                   file_name='default_rotate',
+                   plot = False):
     
             """
             Apply a complex transform to a seismic waveform to correct for rotation errors.
@@ -1016,8 +1017,10 @@ class Seismic:
                     The angle in degrees which the waveform is misaligned.
                 save_mseed (bool):
                     True/False. True to save as mseed file.
-                filename (str):
+                file_name (str):
                     Title of saved mseed file.
+                plot (bool):
+                    True/False. True to plot the results.
 
             Returns:
                 aligned_obspy (dict):
@@ -1108,6 +1111,12 @@ class Seismic:
         
         
                     S_k = x + 1j*y
+
+                    # Store original components for plotting
+                    x_original = x.copy()
+                    y_original = y.copy()
+
+                    # Rotate
                     S_k_aligned = S_k *np.exp(-1j * np.deg2rad(angle))
         
                     x = np.real(S_k_aligned)
@@ -1153,7 +1162,83 @@ class Seismic:
 
                 # Rewrite self.st
                 self.seismic.st = aligned_obspy
+
+                # Create polar plot
+                if plot == True:
+
+                    fig, axes = plt.subplots(1, 2, figsize=(12, 6), subplot_kw={"projection": "polar"})
+
+                    # Original 
+                    theta_original = np.arctan2(y_original, x_original)
+                    r_original = np.sqrt(x_original**2 + y_original**2)
+
+                    # Rotated particle motion
+                    theta_aligned = np.arctan2(y, x)
+                    r_aligned = np.sqrt(x**2 + y**2)
+
+                    # Plot original stream
+                    axes[0].plot(theta_original,
+                                    r_original,
+                                    alpha=0.5,
+                                    color="darkmagenta",)
+
+                    axes[0].set_title(f"Original {stat}", fontsize=14, pad=42)
+
+                    # Plot original and rotated streams
+                    axes[1].plot(theta_original,
+                                    r_original,
+                                    alpha=0.3,
+                                    color="darkmagenta",
+                                    label=f"Initial Motion")
+
+                    axes[1].plot(theta_aligned,
+                                    r_aligned,
+                                    alpha=0.65,
+                                    color="darkblue",
+                                    label=f"Corrected Motion")
+
+                    axes[1].set_title(f"Original and Corrected {stat}", fontsize=14, pad=42)
+
+                    # Make pretty
+                    for ax, r_max in zip(axes, [np.max(r_original), np.max(r_aligned)]):
+
+                        ax.set_rlabel_position(5)
+
+                        ax.legend(loc="upper right", bbox_to_anchor=(1.25, 1.1), fontsize=11)
+
+                        # Set radial limits
+                        ax.set_rmax(r_max * 1.2)
+
+                        # Cardinal directions
+                        cardinals = {
+                            "E": 0,
+                            "N": np.pi / 2,
+                            "W": np.pi,
+                            "S": 3 * np.pi / 2}
+
+                        # Position labels relative to maximum radius
+                        for label, angle in cardinals.items():
+                            ax.text(
+                                angle,
+                                r_max * 1.46,
+                                label,
+                                ha="center",
+                                va="center",
+                                fontsize=12,
+                                fontweight="bold",
+                                clip_on=False)
+
+                        ax.set_yticklabels([])
+
+                    # Overall title
+                    time = NS[0].stats.starttime.strftime("%Y-%m-%d %H:%M:%S")
+                    timespan = NS[0].stats.endtime - NS[0].stats.starttime
+
+                    fig.suptitle(f"Horizontal Particle Motion for {stat}\n" f"{time} for {timespan:.1f} seconds",y=1.05, fontsize=16)
+
+                    plt.tight_layout()
                     
+                                    
             return self.seismic
             
 

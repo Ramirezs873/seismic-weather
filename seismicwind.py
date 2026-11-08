@@ -1824,6 +1824,47 @@ class Seismic:
 
             return self.wd
 
+        # Resample AWS Data
+        def resample_aws(self,
+                            freq="30min"):
+            """
+            Resample AWS data to a regular datetime grid.
+            Uses output of get_var().
+
+            Parameters:
+                freq ("str"):
+                    Time window for resampling
+                
+            Returns:
+                df (pd.DataFrame): 
+                    A DataFrame containing the resampled weather station data.
+            """
+
+            # Retrieve DataFrame
+            df = pd.DataFrame({'var': self.wd[1],'WD': self.wd[2]}, index=pd.to_datetime(self.wd[0]))
+
+            # Wrap around problem for angles
+            df['WD_sin'] = np.sin(np.deg2rad(df['WD']))
+            df['WD_cos'] = np.cos(np.deg2rad(df['WD']))
+
+            # Resample and average
+            df = df.resample(freq).mean()
+
+            # Convert direction back to degrees
+            WD = np.rad2deg(np.arctan2(df['WD_sin'], df['WD_cos'])) % 360
+
+            # Extract variables
+            time = df.index.to_numpy()
+            var = df['var'].to_numpy()
+            WD = WD.to_numpy()
+
+            # Save to self
+            self.wd = [time, var, WD]
+
+            self.seismic_wind.wd = self.wd
+
+            return self.wd
+        
         # Plot AWS Variable
         def plot_aws(self,
                      ylabel = 'AWS Varaible'):

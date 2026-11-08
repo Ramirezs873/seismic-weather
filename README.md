@@ -17,8 +17,9 @@ Investigate near sensor seismic weather signals alongside AWS data.
    * Plot Seismic Waveforms
    * Plot AWS Variable Time Series
    * Plot Wind Speed and Wind Direction
-   * Seismic FFT (with AWS Time Matchup)
+   * Seismic FFT (with and without AWS Time Matchup)
    * Determine Seismic Station Orientation
+   * AWS Resampling
    * Create Seismic PPSDs (Implemented Soon)
    * Inspect Broad Seismic Event Information for Stations (Implemented Soon)
    * Inspect Station Data and Inventory Creation (Implemented Soon)
@@ -29,6 +30,9 @@ Investigate near sensor seismic weather signals alongside AWS data.
    * Random Forest Model
    * Compare Models
    * Optimise Models
+ * Make Predictions
+   * Predict and compare to AWS
+   * Predict without comparison
      
 ## Repository Information
 This repository contains the wind.py and seismicwind.py files. wind.py contains functions for all the main features, alongside early development functions, and other workflows which have been superseded. seismicwind.py contains the main features in a nicely packaged format.
@@ -109,6 +113,9 @@ class Seismic:
       # Isolate Single AWS Variable (+ Wind Direction)
       def get_var():
 
+      # Resample AWS Data from get_var()
+      def resample_aws():
+
       # Plot AWS Variable
       def plot_aws():
 
@@ -118,9 +125,12 @@ class Seismic:
       # Seismic Wind Analysis
       class SeismicWind:
 
-         # FFT Analysis
+         # FFT Analysis with AWS alignment
          def spectra_fft():
-
+  
+         # FFT Analysis without AWS alignment
+         def no_aws_spectra_fft(): 
+  
          # Regression Models
          class Models:
 
@@ -139,8 +149,11 @@ class Seismic:
            # Compare Models
            def compare_models():
 
-          # Experimental Ridge model input. Seismic Power is transformed into Polar Coordinates. WIP
-          def polar_Ridge():
+          # Predict without AWS comparison
+          def no_aws_predict_model():
+
+          # Predict with AWS comparison
+          def predict_model():
            
 ```
 

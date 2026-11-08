@@ -5702,6 +5702,260 @@ class Seismic:
                 
                     return results
 
+                # Compare models
+                def compare_models(self,
+                                   fmin = 3,
+                                   fmax = 49,
+                                   f_band_width = 1,
+                                   step_size = 1,
+                                   n_splits = 5,
+                                   min_WS = 14,
+                                   n_estimators=100, 
+                                   max_depth=15,
+                                   min_samples_split=2,
+                                   min_samples_leaf=3,
+                                   max_features=0.25,
+                                   C= 129.15, 
+                                   gamma = 0.006, 
+                                   epsilon=0.05,
+                                   alpha_EN=0.08, 
+                                   l1_ratio=0.86, 
+                                   alpha_Ridge = 10.24):
+                    
+                    """
+                    Using multiple seismic frequency band widths as model features, 
+                    this function compares the cross validation scores from 
+                    Random Forest, SVR, ElasticNet, and Ridge.
+                    Default parameter values are chosen based on the optimise functions
+                    outputs, for best wind speed cross validation, in this file.
+                    These parameters were calculated using processed CWA86 data from
+                    Dec 25th-31st, 2022, and the corresponding AWS data from CASY Skiway.
+                    The inputs considered a minimum wind speed threshold of 14 m/s
+                    and only looked at seismic frequencies from 3 Hz to 49 Hz.
+                
+                    Parameters:
+                        spectra (list):
+                            A list of dictionaries containing the frequency, power, and Wind Speed data 
+                            for each seismic component (EW, NS, Z) for each station and time period.
+                        fmin (int):
+                            Minimum frequency value for calculating the power of each bandwidths.
+                        fmax (int):
+                            Maximum frequency value for calculating the power of each  bandwidths.
+                        f_band_width (int):
+                            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
+                        step_size (int):
+                            Frequency band step size. Set to less than f_band_width for overlapping bands. 
+                        n_splits (int):
+                            Number of folds the dataset is divided into during cross validation.
+                        min_WS (float):
+                            Minimum (threshold) wind speed for wind to exert force on a seismic sensor.
+                            Hand wavey - approximately 10-15 m/s.
+                
+                    Random Forest Parameters:
+                        n_estimators:
+                            Default = 100
+                        max_depth:
+                            Default = 15
+                        min_samples_split
+                            Default = 2
+                        min_samples_leaf:
+                            Default = 3
+                        max_features:
+                            Default = 0.25
+                    
+                    SVR Parameters:
+                        C:
+                            Default = 129.15
+                        gamma:
+                            Default = 0.006
+                        epsilon:
+                            Default = 0.05
+                    
+                    ElasticNet Parameters:
+                        alpha_EN:
+                            'alpha', Default = 0.08
+                        l1_ratio:
+                            Default = 0.86 (More Lasso than Ridge)
+                    
+                    Ridge Parameters:
+                        alpha_Ridge:
+                            'alpha', Default = 10.24
+                
+                    Returns:
+                        Results (dict):
+                            A dictionary containing the cross validation R² results
+                            for WS, sin2, cos2 for each station inspected.
+                    """
+                
+                
+                    # Setup Result Lists
+                    results = []
+                
+                    # Bands
+                    # Create Bandwidths
+                    bands = []
+                    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
+                        f2 = f1 + f_band_width
+                        band = (f1, f2)
+                        bands.append(band)
+                    # Num of Bands
+                    n_bands = len(bands)
+                    # Create Band Centers
+                    band_centres = []
+                    for f1, f2 in bands:
+                        band_centre = [(f1 + f2)/2]
+                        band_centres.append(band_centre)
+                
+                    # Loop through stations
+                    for station_dict in self.seismic_wind.fft:
+                
+                        # Setup Variables
+                        station = list(station_dict.keys())[0] 
+                        EW_power = station_dict[station][0]['EW']
+                        NS_power = station_dict[station][0]['NS']
+                        Z_power = station_dict[station][0]['Z']
+                        freq = station_dict[station][0]['freq']
+                        aws_values = station_dict[station][0]['aws_values']
+                        wind_direction = station_dict[station][0]['wind_direction']
+                
+                        # Angle wrap around problem
+                        dir_radians = np.deg2rad(wind_direction)
+                        dir_sin = np.sin(dir_radians)
+                        dir_cos = np.cos(dir_radians)
+                        
+                        # Setup results
+                        station_results = []
+                        
+                        # Setup powers
+                        X_Z = np.zeros((len(aws_values), len(bands)))
+                        X_NS = np.zeros((len(aws_values), len(bands)))
+                        X_EW = np.zeros((len(aws_values), len(bands)))
+                
+                        # Apply bandwidths to data
+                        for i, (f1,f2) in enumerate(bands):
+                            band_width = (freq >= f1) & (freq < f2)
+                
+                            # Convert to log to better inspect power scales and apply bandwidth
+                            # [:, band_width], select frequencies and slice unwanted freq data from the row
+                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
+                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
+                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
+                
+                        # Stack all together to process all together as a larger dataset
+                        X_all = np.column_stack([X_Z, X_NS, X_EW])
+                        y_all = np.column_stack([aws_values, dir_sin, dir_cos])
+                
+                
+                        # Should the wind speed threshold be applied before or after training the model?
+                        # Apply minimum WS threshold
+                        if min_WS is not None:
+                            mask = y_all[:, 0] > min_WS
+                            X_all = X_all[mask]
+                            y_all = y_all[mask]
+                            
+                        # Train Model
+                        X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
+                
+                        # Define every model
+                
+                        # Ridge
+                        # Pipeline
+                        # Scale, Ridge # need to optimise alpha
+                        var_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
+                        sin_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
+                        cos_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
+                
+                        # ElasticNet
+                        # Pipeline
+                        # Scale, ElasticNet (Need to find optimal l1 still)
+                        var_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio, max_iter=50000))])
+                        sin_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio, max_iter=50000))])
+                        cos_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio, max_iter=50000))])
+                
+                        # SVR
+                        # Scale, SVR
+                        # (Need to find optimal values)
+                        var_SVR = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma = gamma, epsilon=epsilon))])
+                        sin_SVR = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma = gamma, epsilon=epsilon))])
+                        cos_SVR = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma = gamma, epsilon=epsilon))])
+                
+                        # Random Forest
+                        var_rf = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth,
+                                                        min_samples_split=min_samples_split,min_samples_leaf=min_samples_leaf,
+                                                        max_features=max_features, random_state=42, n_jobs=-1)
+                        sin_rf = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth,
+                                                        min_samples_split=min_samples_split,min_samples_leaf=min_samples_leaf,
+                                                        max_features=max_features, random_state=42, n_jobs=-1)
+                        cos_rf = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth,
+                                                        min_samples_split=min_samples_split,min_samples_leaf=min_samples_leaf,
+                                                        max_features=max_features, random_state=42, n_jobs=-1)
+                
+                        # Cross Validation for all
+                        var_models = [var_ridge, var_EN, var_SVR, var_rf]
+                        sin_models = [sin_ridge, sin_EN, sin_SVR, sin_rf]
+                        cos_models = [cos_ridge, cos_EN, cos_SVR, cos_rf]
+                        var_cv = []
+                        sin_cv = []
+                        cos_cv = []
+                
+                        cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+                
+                        for model in range(len(var_models)):
+                            var_scores = cross_val_score(var_models[model], X_all_train, y_all_train[:, 0], cv=cv, scoring='r2')
+                            sin_scores = cross_val_score(sin_models[model], X_all_train, y_all_train[:, 1], cv=cv, scoring='r2')
+                            cos_scores = cross_val_score(cos_models[model], X_all_train, y_all_train[:, 2], cv=cv, scoring='r2')
+                
+                            var_cv.append(var_scores)
+                            sin_cv.append(sin_scores)
+                            cos_cv.append(cos_scores)
+                
+                        # Store results
+                        station_results.append({
+                            'fmin': fmin,
+                            'fmax': fmax,
+                            'Ridge_var_cv_r2': round(float(var_cv[0].mean()), 4),
+                            'EN_var_cv_r2': round(float(var_cv[1].mean()), 4),
+                            'SVR_var_cv_r2': round(float(var_cv[2].mean()), 4),
+                            'rf_var_cv_r2': round(float(var_cv[3].mean()), 4),
+                            'Ridge_sin_cv_r2': round(float(sin_cv[0].mean()), 4),
+                            'EN_sin_cv_r2': round(float(sin_cv[1].mean()), 4),
+                            'SVR_sin_cv_r2': round(float(sin_cv[2].mean()), 4),
+                            'rf_sin_cv_r2': round(float(sin_cv[3].mean()), 4),
+                            'Ridge_cos_cv_r2': round(float(cos_cv[0].mean()), 4),
+                            'EN_cos_cv_r2': round(float(cos_cv[1].mean()), 4),
+                            'SVR_cos_cv_r2': round(float(cos_cv[2].mean()), 4),
+                            'rf_cos_cv_r2': round(float(cos_cv[3].mean()), 4)
+                        })
+                
+                        # Print results
+                        print(f"{station} WS Cross Validation Results:")
+                        print(f"Ridge R²: {var_cv[0].mean():.4f} +/- {var_cv[0].std():.4f}")
+                        print(f"ElasticNet R²: {var_cv[1].mean():.4f} +/- {var_cv[1].std():.4f}")
+                        print(f"SVR R²: {var_cv[2].mean():.4f} +/- {var_cv[2].std():.4f}")
+                        print(f"Random Forest R²: {var_cv[3].mean():.4f} +/- {var_cv[3].std():.4f}")
+                        
+                        print('----------------------------------------------------------------')
+                
+                        print(f"{station} Sin2Theta Cross Validation Results:")
+                        print(f"Ridge R²: {sin_cv[0].mean():.4f} +/- {sin_cv[0].std():.4f}")
+                        print(f"ElasticNet R²: {sin_cv[1].mean():.4f} +/- {sin_cv[1].std():.4f}")
+                        print(f"SVR R²: {sin_cv[2].mean():.4f} +/- {sin_cv[2].std():.4f}")
+                        print(f"Random Forest R²: {sin_cv[3].mean():.4f} +/- {sin_cv[3].std():.4f}")
+                
+                        print('----------------------------------------------------------------')
+                
+                        print(f"{station} Cos2Theta Cross Validation Results:")
+                        print(f"Ridge R²: {cos_cv[0].mean():.4f} +/- {cos_cv[0].std():.4f}")
+                        print(f"ElasticNet R²: {cos_cv[1].mean():.4f} +/- {cos_cv[1].std():.4f}")
+                        print(f"SVR R²: {cos_cv[2].mean():.4f} +/- {cos_cv[2].std():.4f}")
+                        print(f"Random Forest R²: {cos_cv[3].mean():.4f} +/- {cos_cv[3].std():.4f}")
+                
+                        # Store results
+                        results.append(station_results)
+                
+                    return results
+
                 # Predict!
                 def no_aws_predict_model(self, 
                                         model_path= None,
@@ -6062,258 +6316,4 @@ class Seismic:
                             plt.legend(loc = 'upper right', bbox_to_anchor = (1.45, 1.2), fontsize = 8) 
                             plt.tight_layout()
 
-                    return results
-
-                # Compare models
-                def compare_models(self,
-                                   fmin = 3,
-                                   fmax = 49,
-                                   f_band_width = 1,
-                                   step_size = 1,
-                                   n_splits = 5,
-                                   min_WS = 14,
-                                   n_estimators=100, 
-                                   max_depth=15,
-                                   min_samples_split=2,
-                                   min_samples_leaf=3,
-                                   max_features=0.25,
-                                   C= 129.15, 
-                                   gamma = 0.006, 
-                                   epsilon=0.05,
-                                   alpha_EN=0.08, 
-                                   l1_ratio=0.86, 
-                                   alpha_Ridge = 10.24):
-                    
-                    """
-                    Using multiple seismic frequency band widths as model features, 
-                    this function compares the cross validation scores from 
-                    Random Forest, SVR, ElasticNet, and Ridge.
-                    Default parameter values are chosen based on the optimise functions
-                    outputs, for best wind speed cross validation, in this file.
-                    These parameters were calculated using processed CWA86 data from
-                    Dec 25th-31st, 2022, and the corresponding AWS data from CASY Skiway.
-                    The inputs considered a minimum wind speed threshold of 14 m/s
-                    and only looked at seismic frequencies from 3 Hz to 49 Hz.
-                
-                    Parameters:
-                        spectra (list):
-                            A list of dictionaries containing the frequency, power, and Wind Speed data 
-                            for each seismic component (EW, NS, Z) for each station and time period.
-                        fmin (int):
-                            Minimum frequency value for calculating the power of each bandwidths.
-                        fmax (int):
-                            Maximum frequency value for calculating the power of each  bandwidths.
-                        f_band_width (int):
-                            Bandwidth size. e.g. f_band_width = 1 for (f1,f2)=(1,2), 2 for (1,3), 3 for (1,4). 
-                        step_size (int):
-                            Frequency band step size. Set to less than f_band_width for overlapping bands. 
-                        n_splits (int):
-                            Number of folds the dataset is divided into during cross validation.
-                        min_WS (float):
-                            Minimum (threshold) wind speed for wind to exert force on a seismic sensor.
-                            Hand wavey - approximately 10-15 m/s.
-                
-                    Random Forest Parameters:
-                        n_estimators:
-                            Default = 100
-                        max_depth:
-                            Default = 15
-                        min_samples_split
-                            Default = 2
-                        min_samples_leaf:
-                            Default = 3
-                        max_features:
-                            Default = 0.25
-                    
-                    SVR Parameters:
-                        C:
-                            Default = 129.15
-                        gamma:
-                            Default = 0.006
-                        epsilon:
-                            Default = 0.05
-                    
-                    ElasticNet Parameters:
-                        alpha_EN:
-                            'alpha', Default = 0.08
-                        l1_ratio:
-                            Default = 0.86 (More Lasso than Ridge)
-                    
-                    Ridge Parameters:
-                        alpha_Ridge:
-                            'alpha', Default = 10.24
-                
-                    Returns:
-                        Results (dict):
-                            A dictionary containing the cross validation R² results
-                            for WS, sin2, cos2 for each station inspected.
-                    """
-                
-                
-                    # Setup Result Lists
-                    results = []
-                
-                    # Bands
-                    # Create Bandwidths
-                    bands = []
-                    for f1 in range(fmin, fmax - f_band_width + 1, step_size):
-                        f2 = f1 + f_band_width
-                        band = (f1, f2)
-                        bands.append(band)
-                    # Num of Bands
-                    n_bands = len(bands)
-                    # Create Band Centers
-                    band_centres = []
-                    for f1, f2 in bands:
-                        band_centre = [(f1 + f2)/2]
-                        band_centres.append(band_centre)
-                
-                    # Loop through stations
-                    for station_dict in self.seismic_wind.fft:
-                
-                        # Setup Variables
-                        station = list(station_dict.keys())[0] 
-                        EW_power = station_dict[station][0]['EW']
-                        NS_power = station_dict[station][0]['NS']
-                        Z_power = station_dict[station][0]['Z']
-                        freq = station_dict[station][0]['freq']
-                        aws_values = station_dict[station][0]['aws_values']
-                        wind_direction = station_dict[station][0]['wind_direction']
-                
-                        # Angle wrap around problem
-                        dir_radians = np.deg2rad(wind_direction)
-                        dir_sin = np.sin(dir_radians)
-                        dir_cos = np.cos(dir_radians)
-                        
-                        # Setup results
-                        station_results = []
-                        
-                        # Setup powers
-                        X_Z = np.zeros((len(aws_values), len(bands)))
-                        X_NS = np.zeros((len(aws_values), len(bands)))
-                        X_EW = np.zeros((len(aws_values), len(bands)))
-                
-                        # Apply bandwidths to data
-                        for i, (f1,f2) in enumerate(bands):
-                            band_width = (freq >= f1) & (freq < f2)
-                
-                            # Convert to log to better inspect power scales and apply bandwidth
-                            # [:, band_width], select frequencies and slice unwanted freq data from the row
-                            # .mean(axis=1), mean for the selected frequency row. Reshape for model input.
-                            X_Z[:, i] = np.log10(Z_power[:, band_width].mean(axis=1) + 1e-20)
-                            X_NS[:, i] = np.log10(NS_power[:, band_width].mean(axis=1) + 1e-20)
-                            X_EW[:, i] = np.log10(EW_power[:, band_width].mean(axis=1) + 1e-20)
-                
-                        # Stack all together to process all together as a larger dataset
-                        X_all = np.column_stack([X_Z, X_NS, X_EW])
-                        y_all = np.column_stack([aws_values, dir_sin, dir_cos])
-                
-                
-                        # Should the wind speed threshold be applied before or after training the model?
-                        # Apply minimum WS threshold
-                        if min_WS is not None:
-                            mask = y_all[:, 0] > min_WS
-                            X_all = X_all[mask]
-                            y_all = y_all[mask]
-                            
-                        # Train Model
-                        X_all_train, X_all_test, y_all_train, y_all_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
-                
-                        # Define every model
-                
-                        # Ridge
-                        # Pipeline
-                        # Scale, Ridge # need to optimise alpha
-                        var_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
-                        sin_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
-                        cos_ridge = Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=alpha_Ridge))])
-                
-                        # ElasticNet
-                        # Pipeline
-                        # Scale, ElasticNet (Need to find optimal l1 still)
-                        var_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio, max_iter=50000))])
-                        sin_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio, max_iter=50000))])
-                        cos_EN = Pipeline([('scaler', StandardScaler()), ('enet', ElasticNet(alpha=alpha_EN, l1_ratio=l1_ratio, max_iter=50000))])
-                
-                        # SVR
-                        # Scale, SVR
-                        # (Need to find optimal values)
-                        var_SVR = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma = gamma, epsilon=epsilon))])
-                        sin_SVR = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma = gamma, epsilon=epsilon))])
-                        cos_SVR = Pipeline([('scaler', StandardScaler()),('svr', SVR(C=C, gamma = gamma, epsilon=epsilon))])
-                
-                        # Random Forest
-                        var_rf = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth,
-                                                        min_samples_split=min_samples_split,min_samples_leaf=min_samples_leaf,
-                                                        max_features=max_features, random_state=42, n_jobs=-1)
-                        sin_rf = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth,
-                                                        min_samples_split=min_samples_split,min_samples_leaf=min_samples_leaf,
-                                                        max_features=max_features, random_state=42, n_jobs=-1)
-                        cos_rf = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth,
-                                                        min_samples_split=min_samples_split,min_samples_leaf=min_samples_leaf,
-                                                        max_features=max_features, random_state=42, n_jobs=-1)
-                
-                        # Cross Validation for all
-                        var_models = [var_ridge, var_EN, var_SVR, var_rf]
-                        sin_models = [sin_ridge, sin_EN, sin_SVR, sin_rf]
-                        cos_models = [cos_ridge, cos_EN, cos_SVR, cos_rf]
-                        var_cv = []
-                        sin_cv = []
-                        cos_cv = []
-                
-                        cv = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-                
-                        for model in range(len(var_models)):
-                            var_scores = cross_val_score(var_models[model], X_all_train, y_all_train[:, 0], cv=cv, scoring='r2')
-                            sin_scores = cross_val_score(sin_models[model], X_all_train, y_all_train[:, 1], cv=cv, scoring='r2')
-                            cos_scores = cross_val_score(cos_models[model], X_all_train, y_all_train[:, 2], cv=cv, scoring='r2')
-                
-                            var_cv.append(var_scores)
-                            sin_cv.append(sin_scores)
-                            cos_cv.append(cos_scores)
-                
-                        # Store results
-                        station_results.append({
-                            'fmin': fmin,
-                            'fmax': fmax,
-                            'Ridge_var_cv_r2': round(float(var_cv[0].mean()), 4),
-                            'EN_var_cv_r2': round(float(var_cv[1].mean()), 4),
-                            'SVR_var_cv_r2': round(float(var_cv[2].mean()), 4),
-                            'rf_var_cv_r2': round(float(var_cv[3].mean()), 4),
-                            'Ridge_sin_cv_r2': round(float(sin_cv[0].mean()), 4),
-                            'EN_sin_cv_r2': round(float(sin_cv[1].mean()), 4),
-                            'SVR_sin_cv_r2': round(float(sin_cv[2].mean()), 4),
-                            'rf_sin_cv_r2': round(float(sin_cv[3].mean()), 4),
-                            'Ridge_cos_cv_r2': round(float(cos_cv[0].mean()), 4),
-                            'EN_cos_cv_r2': round(float(cos_cv[1].mean()), 4),
-                            'SVR_cos_cv_r2': round(float(cos_cv[2].mean()), 4),
-                            'rf_cos_cv_r2': round(float(cos_cv[3].mean()), 4)
-                        })
-                
-                        # Print results
-                        print(f"{station} WS Cross Validation Results:")
-                        print(f"Ridge R²: {var_cv[0].mean():.4f} +/- {var_cv[0].std():.4f}")
-                        print(f"ElasticNet R²: {var_cv[1].mean():.4f} +/- {var_cv[1].std():.4f}")
-                        print(f"SVR R²: {var_cv[2].mean():.4f} +/- {var_cv[2].std():.4f}")
-                        print(f"Random Forest R²: {var_cv[3].mean():.4f} +/- {var_cv[3].std():.4f}")
-                        
-                        print('----------------------------------------------------------------')
-                
-                        print(f"{station} Sin2Theta Cross Validation Results:")
-                        print(f"Ridge R²: {sin_cv[0].mean():.4f} +/- {sin_cv[0].std():.4f}")
-                        print(f"ElasticNet R²: {sin_cv[1].mean():.4f} +/- {sin_cv[1].std():.4f}")
-                        print(f"SVR R²: {sin_cv[2].mean():.4f} +/- {sin_cv[2].std():.4f}")
-                        print(f"Random Forest R²: {sin_cv[3].mean():.4f} +/- {sin_cv[3].std():.4f}")
-                
-                        print('----------------------------------------------------------------')
-                
-                        print(f"{station} Cos2Theta Cross Validation Results:")
-                        print(f"Ridge R²: {cos_cv[0].mean():.4f} +/- {cos_cv[0].std():.4f}")
-                        print(f"ElasticNet R²: {cos_cv[1].mean():.4f} +/- {cos_cv[1].std():.4f}")
-                        print(f"SVR R²: {cos_cv[2].mean():.4f} +/- {cos_cv[2].std():.4f}")
-                        print(f"Random Forest R²: {cos_cv[3].mean():.4f} +/- {cos_cv[3].std():.4f}")
-                
-                        # Store results
-                        results.append(station_results)
-                
                     return results
